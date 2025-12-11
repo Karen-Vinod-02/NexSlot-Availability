@@ -1,0 +1,20 @@
+[
+  {
+    "id": "c1",
+    "roomNumber": "101",
+    "capacity": 30,
+    "hasSmartboard": true
+  },
+  {
+    "id": "c2",
+    "roomNumber": "102",
+    "capacity": 25,
+    "hasSmartboard": false
+  },
+  {
+    "id": "c3",
+    "roomNumber": "205",
+    "capacity": 50,
+    "hasSmartboard": true
+  }
+]
