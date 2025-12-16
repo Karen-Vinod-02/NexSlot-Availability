@@ -1,23 +1,71 @@
-version: "3.8"
+version: '3.8'
 
 services:
+<<<<<<< HEAD
   db:
     image: mysql:8.0
+=======
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: classroom_mysql
+    restart: always
+>>>>>>> a6e58ae (Fix DB connection mismatch and related changes)
     environment:
-      MYSQL_ROOT_PASSWORD: example
+      MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: classroom_system
+<<<<<<< HEAD
       MYSQL_USER: appuser
       MYSQL_PASSWORD: apppassword
+=======
+      MYSQL_USER: classroom_user
+      MYSQL_PASSWORD: classroom_pass
+>>>>>>> a6e58ae (Fix DB connection mismatch and related changes)
     ports:
       - "3306:3306"
     volumes:
-      - db_data:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - classroom_network
 
+<<<<<<< HEAD
   adminer:
     image: adminer
+=======
+  # Streamlit Application
+  streamlit:
+    build: .
+    container_name: classroom_app
+>>>>>>> a6e58ae (Fix DB connection mismatch and related changes)
     restart: always
     ports:
-      - "8080:8080"
+      - "8501:8501"
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=classroom_system
+      - MYSQL_USER=classroom_user
+      - MYSQL_PASSWORD=classroom_pass
+    volumes:
+      - .:/app
+      - ./secrets.toml:/app/.streamlit/secrets.toml:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - classroom_network
+    command: streamlit run app.py --server.address=0.0.0.0
+
+networks:
+  classroom_network:
+    driver: bridge
 
 volumes:
-  db_data:
+  mysql_data:
+    driver: local

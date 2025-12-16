@@ -675,12 +675,17 @@ def render_student_view():
                     
                     if has_student_feedback(booking['bookingKey'], st.session_state.username):
                         st.success("You have already submitted feedback for this lecture!")
-                        
-                        student_feedback = next(f for f in booking['feedback'] 
-                                              if f['studentId'] == st.session_state.username)
-                        st.markdown(f"**Your Rating:** {student_feedback['rating']}/5")
-                        if student_feedback.get('comments'):
-                            st.markdown(f"**Your Comments:** {student_feedback['comments']}")
+
+                        student_feedback = None
+                        for f in booking['feedback']:
+                            if f['studentId'] == st.session_state.username:
+                                student_feedback = f
+                                break
+
+                        if student_feedback:
+                            st.markdown(f"**Your Rating:** {student_feedback['rating']}/5")
+                            if student_feedback.get('comments'):
+                                st.markdown(f"**Your Comments:** {student_feedback['comments']}")
                     else:
                         st.markdown("**Rate this lecture:**")
                         
