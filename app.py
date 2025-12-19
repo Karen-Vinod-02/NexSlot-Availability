@@ -4,6 +4,17 @@ import pandas as pd
 import json
 import os
 import hashlib
+<<<<<<< HEAD
+=======
+from sqlalchemy import text
+
+@st.cache_resource
+def get_db():
+    return st.connection("mysql", type="sql").engine
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+>>>>>>> d54d050 (Iteration 1)
 
 # Page configuration
 st.set_page_config(
@@ -58,6 +69,7 @@ SUBJECTS_BY_DEPT = {
 # -----------------------
 # Data persistence functions
 # -----------------------
+<<<<<<< HEAD
 DATA_DIR = "data"
 CLASSROOMS_FILE = os.path.join(DATA_DIR, "classrooms.json")
 BOOKINGS_FILE = os.path.join(DATA_DIR, "bookings.json")
@@ -148,6 +160,97 @@ def load_data():
 
     except Exception as e:
         st.error(f"Error loading data: {e}")
+=======
+def init_database():
+    """Create all necessary tables if they don't exist"""
+    engine = get_db()
+    
+    with engine.begin() as conn:
+        # Users table
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(255) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                role VARCHAR(50) NOT NULL,
+                name VARCHAR(255),
+                department VARCHAR(255),
+                year VARCHAR(50),
+                division VARCHAR(10),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        
+        # Classrooms table
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS classrooms (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                room_number VARCHAR(50) UNIQUE NOT NULL,
+                capacity INT NOT NULL,
+                has_smartboard BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        
+        # Bookings table
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS bookings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                classroom_id INT NOT NULL,
+                faculty_id VARCHAR(255) NOT NULL,
+                booking_date DATE NOT NULL,
+                slot VARCHAR(50) NOT NULL,
+                subject VARCHAR(255) NOT NULL,
+                faculty_name VARCHAR(255) NOT NULL,
+                status VARCHAR(50) DEFAULT 'Confirmed',
+                is_guest_lecture BOOLEAN DEFAULT FALSE,
+                lecture_title VARCHAR(255),
+                department VARCHAR(255),
+                year VARCHAR(50),
+                division VARCHAR(10),
+                semester VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_booking (classroom_id, booking_date, slot),
+                FOREIGN KEY (classroom_id) REFERENCES classrooms(id) ON DELETE CASCADE
+            )
+        """))
+        
+        # Feedback table
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS feedback (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                booking_id INT NOT NULL,
+                student_id VARCHAR(255) NOT NULL,
+                rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+                comments TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_feedback (booking_id, student_id),
+                FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE
+            )
+        """))
+        
+        # System settings table
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                setting_key VARCHAR(100) UNIQUE NOT NULL,
+                setting_value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        """))
+        
+        # Initialize default settings if not exists
+        conn.execute(text("""
+            INSERT IGNORE INTO system_settings (setting_key, setting_value)
+            VALUES ('classroom_limit', '100')
+        """))
+        
+        # Create default admin if not exists
+        conn.execute(text("""
+            INSERT IGNORE INTO users (username, password_hash, role, name)
+            VALUES ('admin', :pwd, 'Admin', 'System Administrator')
+        """), {"pwd": hash_password("admin123")})
+>>>>>>> d54d050 (Iteration 1)
 
 # -----------------------
 # Session initialization
@@ -219,6 +322,88 @@ def require_auth(allowed_roles):
     return True
 
 # -----------------------
+<<<<<<< HEAD
+=======
+# Database helper functions
+# -----------------------
+def get_all_classrooms():
+    """Get all classrooms from database"""
+    engine = get_db()
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT * FROM classrooms ORDER BY room_number"))
+        return [dict(row._mapping) for row in result]
+
+def get_classroom_by_id(classroom_id):
+    """Get classroom by ID"""
+    engine = get_db()
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("SELECT * FROM classrooms WHERE id = :id"),
+            {"id": classroom_id}
+        ).fetchone()
+        return dict(result._mapping) if result else None
+
+def get_all_bookings():
+    """Get all bookings with feedback"""
+    engine = get_db()
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT b.*, 
+                   GROUP_CONCAT(
+                       CONCAT_WS('|', f.student_id, f.rating, f.comments, f.created_at)
+                       SEPARATOR '||'
+                   ) as feedback_data
+            FROM bookings b
+            LEFT JOIN feedback f ON b.id = f.booking_id
+            GROUP BY b.id
+        """))
+        
+        bookings = {}
+        for row in result:
+            row_dict = dict(row._mapping)
+            booking_key = f"{row_dict['classroom_id']}_{row_dict['slot']}_{row_dict['booking_date']}"
+            
+            # Parse feedback
+            feedback_list = []
+            if row_dict['feedback_data']:
+                for feedback_str in row_dict['feedback_data'].split('||'):
+                    parts = feedback_str.split('|')
+                    if len(parts) >= 4:
+                        feedback_list.append({
+                            'studentId': parts[0],
+                            'rating': int(parts[1]),
+                            'comments': parts[2] if parts[2] != 'None' else '',
+                            'timestamp': parts[3]
+                        })
+            
+            row_dict['feedback'] = feedback_list
+            row_dict['bookingKey'] = booking_key
+            bookings[booking_key] = row_dict
+        
+        return bookings
+
+def get_system_setting(key, default=None):
+    """Get system setting"""
+    engine = get_db()
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("SELECT setting_value FROM system_settings WHERE setting_key = :key"),
+            {"key": key}
+        ).fetchone()
+        return result.setting_value if result else default
+
+def set_system_setting(key, value):
+    """Set system setting"""
+    engine = get_db()
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO system_settings (setting_key, setting_value)
+            VALUES (:key, :value)
+            ON DUPLICATE KEY UPDATE setting_value = :value
+        """), {"key": key, "value": value})
+
+# -----------------------
+>>>>>>> d54d050 (Iteration 1)
 # Helper functions
 # -----------------------
 def generate_id():
@@ -262,7 +447,43 @@ def can_student_give_feedback(booking, student_data):
 
 def has_student_feedback(booking_key, student_id):
     """Check if student has already given feedback"""
+<<<<<<< HEAD
     if booking_key not in st.session_state.bookings:
+=======
+    engine = get_db()
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("""
+                SELECT COUNT(*) as count FROM feedback 
+                WHERE booking_id = :bid AND student_id = :sid
+            """),
+            {"bid": booking_id, "sid": student_id}
+        ).fetchone()
+        return result.count > 0
+
+def submit_feedback(booking_id, student_id, rating, comments):
+    """Submit student feedback for a lecture"""
+    engine = get_db()
+    
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO feedback (booking_id, student_id, rating, comments)
+                VALUES (:bid, :sid, :rating, :comments)
+            """), {
+                "bid": booking_id,
+                "sid": student_id,
+                "rating": rating,
+                "comments": comments
+            })
+        st.success("Thank you for your feedback!")
+        return True
+    except Exception as e:
+        if 'Duplicate entry' in str(e):
+            st.warning("You have already submitted feedback for this lecture!")
+        else:
+            st.error(f"Error submitting feedback: {str(e)}")
+>>>>>>> d54d050 (Iteration 1)
         return False
     
     booking = st.session_state.bookings[booking_key]
@@ -329,8 +550,43 @@ def create_booking(classroom_id, slot, subject, faculty_name, booking_date,
     
     booking_key = f"{classroom_id}_{slot}_{booking_date}"
     
+<<<<<<< HEAD
     if booking_key in st.session_state.bookings:
         st.error(f"Booking conflict! This slot is already reserved on {booking_date}.")
+=======
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO bookings 
+                (classroom_id, faculty_id, booking_date, slot, subject, faculty_name,
+                 is_guest_lecture, lecture_title, department, year, division, semester)
+                VALUES (:cid, :fid, :date, :slot, :subj, :fname, :guest, :title, :dept, :yr, :div, :sem)
+            """), {
+                "cid": classroom_id,
+                "fid": st.session_state.username,
+                "date": booking_date,
+                "slot": slot,
+                "subj": subject,
+                "fname": faculty_name,
+                "guest": is_guest_lecture,
+                "title": lecture_title if is_guest_lecture else None,
+                "dept": guest_dept_restriction if is_guest_lecture else department,
+                "yr": year if not is_guest_lecture else None,
+                "div": division if not is_guest_lecture else None,
+                "sem": semester if not is_guest_lecture else None
+            })
+        
+        if is_guest_lecture:
+            st.success(f"Guest Lecture '{lecture_title}' successfully booked!")
+        else:
+            st.success("Classroom successfully booked!")
+        return True
+    except Exception as e:
+        if 'Duplicate entry' in str(e):
+            st.error(f"Booking conflict! This slot is already reserved on {booking_date}.")
+        else:
+            st.error(f"Error creating booking: {str(e)}")
+>>>>>>> d54d050 (Iteration 1)
         return False
     
     new_booking = {
@@ -363,6 +619,7 @@ def create_booking(classroom_id, slot, subject, faculty_name, booking_date,
 
 def cancel_booking(booking_key):
     """Cancel a booking"""
+<<<<<<< HEAD
     if booking_key in st.session_state.bookings:
         del st.session_state.bookings[booking_key]
         save_data()
@@ -392,6 +649,61 @@ def delete_classroom(room_id):
         del st.session_state.bookings[key]
     save_data()
     st.success("Classroom deleted successfully!")
+=======
+    engine = get_db()
+    
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(
+                text("DELETE FROM bookings WHERE id = :id"),
+                {"id": booking_id}
+            )
+            if result.rowcount > 0:
+                st.success("Booking successfully cancelled.")
+                return True
+            else:
+                st.error("Booking not found.")
+                return False
+    except Exception as e:
+        st.error(f"Error cancelling booking: {str(e)}")
+        return False
+
+def add_classroom(room_number, capacity, has_smartboard):
+    """Add a new classroom"""
+    engine = get_db()
+    
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO classrooms (room_number, capacity, has_smartboard)
+                VALUES (:rnum, :cap, :sb)
+            """), {
+                "rnum": room_number,
+                "cap": int(capacity),
+                "sb": has_smartboard
+            })
+        st.success(f"Classroom {room_number} added successfully!")
+        return True
+    except Exception as e:
+        if 'Duplicate entry' in str(e):
+            st.error(f"Classroom {room_number} already exists!")
+        else:
+            st.error(f"Error adding classroom: {str(e)}")
+        return False
+
+def delete_classroom(room_id):
+    """Delete a classroom"""
+    engine = get_db()
+    
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM classrooms WHERE id = :id"), {"id": room_id})
+        st.success("Classroom deleted successfully!")
+        return True
+    except Exception as e:
+        st.error(f"Error deleting classroom: {str(e)}")
+        return False
+>>>>>>> d54d050 (Iteration 1)
 
 def create_availability_dataframe(selected_date, filter_subject=None, smartboard_only=False):
     """Create a DataFrame for availability display"""
@@ -556,6 +868,7 @@ def render_login_page():
                         else:
                             st.error(message)
         
+
         st.markdown("---")
 
 # -----------------------
@@ -675,17 +988,12 @@ def render_student_view():
                     
                     if has_student_feedback(booking['bookingKey'], st.session_state.username):
                         st.success("You have already submitted feedback for this lecture!")
-
-                        student_feedback = None
-                        for f in booking['feedback']:
-                            if f['studentId'] == st.session_state.username:
-                                student_feedback = f
-                                break
-
-                        if student_feedback:
-                            st.markdown(f"**Your Rating:** {student_feedback['rating']}/5")
-                            if student_feedback.get('comments'):
-                                st.markdown(f"**Your Comments:** {student_feedback['comments']}")
+                        
+                        student_feedback = next(f for f in booking['feedback'] 
+                                              if f['studentId'] == st.session_state.username)
+                        st.markdown(f"**Your Rating:** {student_feedback['rating']}/5")
+                        if student_feedback.get('comments'):
+                            st.markdown(f"**Your Comments:** {student_feedback['comments']}")
                     else:
                         st.markdown("**Rate this lecture:**")
                         
