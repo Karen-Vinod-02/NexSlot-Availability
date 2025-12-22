@@ -1,0 +1,41 @@
+{% extends 'classroom/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Sign In{% endblock %}
+
+{% block content %}
+<div class="container d-flex flex-column align-items-center justify-content-center min-vh-100 py-5">
+    <div class="col-12 col-md-6 col-lg-5 col-xl-4">
+        <div class="card shadow-lg border-0 rounded-4">
+            <div class="card-body p-5">
+                <div class="text-center mb-4">
+                    <div class="d-inline-flex align-items-center justify-content-center bg-light rounded-circle mb-3" style="width: 80px; height: 80px;">
+                        <i class="fas fa-university fa-2x text-primary"></i>
+                    </div>
+                    <h2 class="fw-bold text-dark mb-1">Institutional Login</h2>
+                    <p class="text-muted small">Use your .ac.in or .edu email</p>
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form|crispy }}
+                    
+                    <div class="d-grid mt-4">
+                        <button type="submit" class="btn btn-primary py-2 fw-semibold shadow-sm">
+                            Sign In
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer bg-light border-0 py-3 text-center rounded-bottom-4">
+                <p class="mb-0 text-muted small">
+                    First time user or trouble logging in? <br>
+                    <a href="{% url 'classroom:forgot_password' %}" class="text-primary text-decoration-none fw-bold">
+                        Reset Password
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

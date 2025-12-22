@@ -1,0 +1,140 @@
+{% extends 'classroom/base.html' %}
+{% load classroom_extras %} 
+
+{% block title %}Classroom Schedule{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-end mb-4">
+        <div>
+            <h6 class="text-uppercase text-muted fw-bold small letter-spacing-1 mb-1">Real-time Schedule</h6>
+            <h2 class="fw-bold text-dark mb-0">Classroom Availability</h2>
+        </div>
+        
+        <form method="get" class="d-flex align-items-center gap-2 mt-3 mt-md-0 bg-white p-2 rounded-pill shadow-sm border">
+            <div class="d-flex align-items-center px-3 border-end">
+                <i class="far fa-calendar text-muted me-2"></i>
+                <span class="text-muted small fw-bold me-2">DATE:</span>
+                
+                <input type="date" class="form-control form-control-sm border-0 bg-transparent p-0" 
+                       id="date" name="date" value="{{ selected_date }}" 
+                       style="width: 130px; outline: none; box-shadow: none;">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm rounded-pill px-4 fw-bold">
+                Update
+            </button>
+        </form>
+    </div>
+
+    <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="min-width: 1000px;">
+                <thead class="bg-light border-bottom">
+                    <tr>
+                        <th class="ps-4 py-3 text-uppercase text-muted small fw-bold" style="width: 120px;">Room</th>
+                        <th class="py-3 text-uppercase text-muted small fw-bold text-center" style="width: 80px;">Cap</th>
+                        {% for slot in config.class_slots %}
+                            <th class="py-3 text-uppercase text-muted small fw-bold text-center">{{ slot }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="bg-white">
+                    {% for item in availability_data %}
+                        <tr>
+                            <td class="ps-4 py-3 border-end-subtle">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center fw-bold me-2" style="width: 40px; height: 40px;">
+                                        {{ item.classroom.room_number }}
+                                    </div>
+                                    <div class="d-flex flex-column">
+                                        <span class="fw-bold text-dark small">Classroom</span>
+                                        {% if item.classroom.has_smartboard %}
+                                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 rounded-pill" style="font-size: 0.6rem;">
+                                                <i class="fas fa-tv me-1"></i>Smartboard
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            
+                            <td class="text-center text-muted fw-medium border-end-subtle">
+                                {{ item.classroom.capacity }}
+                            </td>
+
+                            {% for slot in config.class_slots %}
+                                <td class="p-2 border-start border-light">
+                                    {% with booking=item.slots|dict_key:slot %}
+                                        {% if booking %}
+                                            <div class="card border-0 h-100 shadow-none {% if booking.is_guest_lecture %}bg-warning bg-opacity-10{% else %}bg-light{% endif %}">
+                                                <div class="card-body p-2 text-center">
+                                                    {% if booking.is_guest_lecture %}
+                                                        <span class="badge bg-warning text-dark mb-1" style="font-size: 0.6rem;">Guest</span>
+                                                    {% endif %}
+                                                    <div class="fw-bold text-dark text-truncate small" style="max-width: 120px;" title="{{ booking.subject }}">
+                                                        {{ booking.subject }}
+                                                    </div>
+                                                    <div class="text-muted" style="font-size: 0.7rem;">
+                                                        {{ booking.faculty_name|truncatechars:15 }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {% else %}
+                                            <div class="text-center py-2 text-success opacity-50 hover-opacity-100">
+                                                <i class="fas fa-check-circle mb-1"></i>
+                                                <div class="small fw-bold" style="font-size: 0.7rem;">FREE</div>
+                                            </div>
+                                        {% endif %}
+                                    {% endwith %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="card-footer bg-white border-top py-3">
+            <div class="d-flex gap-4 justify-content-center text-muted small">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-check-circle text-success me-2"></i> Available
+                </div>
+                <div class="d-flex align-items-center">
+                    <span class="d-inline-block bg-light border rounded me-2" style="width: 12px; height: 12px;"></span> Regular Class
+                </div>
+                <div class="d-flex align-items-center">
+                    <span class="d-inline-block bg-warning bg-opacity-25 border border-warning rounded me-2" style="width: 12px; height: 12px;"></span> Guest Lecture
+                </div>
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-tv text-info me-2"></i> Smartboard Equipped
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Table hover effect */
+    .table-hover tbody tr:hover {
+        background-color: rgba(248, 250, 252, 0.6);
+    }
+    .hover-opacity-100:hover {
+        opacity: 1 !important;
+        cursor: default;
+    }
+    .border-end-subtle {
+        border-right: 1px solid #f1f5f9;
+    }
+    /* Subtle scrollbar for table */
+    .table-responsive::-webkit-scrollbar {
+        height: 6px;
+    }
+    .table-responsive::-webkit-scrollbar-track {
+        background: #f1f5f9;
+    }
+    .table-responsive::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,265 @@
+{% extends 'classroom/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Book a Classroom{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-lg border-0 rounded-4">
+                
+                <div class="card-header bg-white border-bottom-0 pt-5 pb-0 px-5 text-center">
+                    <div class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary rounded-circle mb-3" style="width: 64px; height: 64px;">
+                        <i class="fas fa-calendar-plus fa-2x"></i>
+                    </div>
+                    <h3 class="fw-bold mb-1">Book a Classroom</h3>
+                    <p class="text-muted">Schedule a new session</p>
+                    
+                    <div class="d-flex justify-content-center mt-4 mb-2">
+                        <div class="btn-group p-1 bg-light rounded-pill" role="group">
+                            <input type="radio" class="btn-check" name="type_selector" id="type_regular" value="regular" autocomplete="off" checked>
+                            <label class="btn btn-sm btn-light rounded-pill px-4 fw-bold border-0" for="type_regular" id="label_regular">
+                                Regular Lecture
+                            </label>
+
+                            <input type="radio" class="btn-check" name="type_selector" id="type_guest" value="guest" autocomplete="off">
+                            <label class="btn btn-sm btn-light rounded-pill px-4 fw-bold border-0" for="type_guest" id="label_guest">
+                                Guest Lecture
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body p-5 pt-4">
+                    
+                    {% if form.errors %}
+                        <div class="alert alert-danger rounded-3 mb-4">
+                            <h6 class="fw-bold mb-1"><i class="fas fa-exclamation-circle me-2"></i>Please correct the following:</h6>
+                            <ul class="mb-0 small ps-3">
+                                {% for field, errors in form.errors.items %}
+                                    {% for error in errors %}
+                                        <li><strong>{{ field|title }}:</strong> {{ error }}</li>
+                                    {% endfor %}
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+
+                    <form method="post" id="bookingForm" data-subjects-url="{% url 'classroom:ajax_load_subjects' %}">
+                        {% csrf_token %}
+                        
+                        <div class="d-none">
+                            {{ form.is_guest_lecture }} 
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                {{ form.classroom|as_crispy_field }}
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.booking_date|as_crispy_field }}
+                            </div>
+                            <div class="col-md-12">
+                                {{ form.slot|as_crispy_field }}
+                            </div>
+                        </div>
+
+                        <hr class="border-light mb-4">
+
+                        <div id="regular_section">
+                            <h6 class="text-primary fw-bold text-uppercase small letter-spacing-1 mb-3">
+                                <i class="fas fa-book-reader me-2"></i>Class Details
+                            </h6>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    {{ form.department|as_crispy_field }}
+                                </div>
+                                <div class="col-md-4">
+                                    {{ form.year|as_crispy_field }}
+                                </div>
+                                <div class="col-md-4">
+                                    {{ form.semester|as_crispy_field }}
+                                </div>
+                                <div class="col-md-12">
+                                    {{ form.subject|as_crispy_field }}
+                                </div>
+                                <div class="col-md-12">
+                                    {{ form.division|as_crispy_field }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="guest_section" style="display: none;">
+                            <h6 class="text-success fw-bold text-uppercase small letter-spacing-1 mb-3">
+                                <i class="fas fa-user-tie me-2"></i>Guest Event Details
+                            </h6>
+                            
+                            <div class="mb-3">
+                                {{ form.lecture_title|as_crispy_field }}
+                            </div>
+                            
+                            <div class="mb-3">
+                                {{ form.guest_speaker|as_crispy_field }}
+                            </div>
+                            
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label text-muted small">Target Department (Optional)</label>
+                                    <select name="guest_department" class="form-select">
+                                        <option value="">All Departments</option>
+                                        <option value="Computer Engineering">Computer Engineering</option>
+                                        <option value="Mechanical Engineering">Mechanical Engineering</option>
+                                        <option value="Civil Engineering">Civil Engineering</option>
+                                        <option value="Electronics & Telecom (EXTC)">Electronics & Telecom (EXTC)</option>
+                                        <option value="Chemical Engineering">Chemical Engineering</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-muted small">Target Year (Optional)</label>
+                                    <select name="guest_year" class="form-select">
+                                        <option value="">Open to all</option>
+                                        <option value="FE">First Year (FE)</option>
+                                        <option value="SE">Second Year (SE)</option>
+                                        <option value="TE">Third Year (TE)</option>
+                                        <option value="BE">Final Year (BE)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-5">
+                            <button type="submit" class="btn btn-primary py-2 fw-bold shadow-sm rounded-3">
+                                <i class="fas fa-check-circle me-2"></i>Confirm Booking
+                            </button>
+                            <a href="{% url 'classroom:faculty_dashboard' %}" class="btn btn-light text-muted py-2 fw-semibold rounded-3">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-check:checked + .btn-light {
+        background-color: var(--primary-color);
+        color: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    #regular_section, #guest_section {
+        animation: fadeIn 0.3s ease-in-out;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const radioRegular = document.getElementById('type_regular');
+    const radioGuest = document.getElementById('type_guest');
+    const sectionRegular = document.getElementById('regular_section');
+    const sectionGuest = document.getElementById('guest_section');
+    
+    // SAFE SELECTOR: Use getElementById which matches the ID generated by Django Forms
+    const checkboxIsGuest = document.getElementById('id_is_guest_lecture'); 
+    
+    // 1. TOGGLE LOGIC
+    function toggleLectureType() {
+        if (radioGuest.checked) {
+            // GUEST MODE
+            sectionRegular.style.display = 'none';
+            sectionGuest.style.display = 'block';
+            
+            // Check the hidden box so Backend knows it's a guest lecture
+            if(checkboxIsGuest) checkboxIsGuest.checked = true;
+            
+            setRequired(sectionRegular, false);
+            setRequired(sectionGuest, true);
+        } else {
+            // REGULAR MODE
+            sectionGuest.style.display = 'none';
+            sectionRegular.style.display = 'block';
+            
+            // Uncheck the hidden box
+            if(checkboxIsGuest) checkboxIsGuest.checked = false;
+
+            setRequired(sectionGuest, false);
+            setRequired(sectionRegular, true);
+        }
+    }
+
+    function setRequired(container, isRequired) {
+        const inputs = container.querySelectorAll('input, select');
+        inputs.forEach(input => {
+            // Skip optional manual fields
+            if (input.name === 'guest_department' || input.name === 'guest_year') return;
+            // Skip division (often optional)
+            if (input.name === 'division') return;
+
+            if (isRequired) {
+                input.setAttribute('required', '');
+            } else {
+                input.removeAttribute('required');
+                // Optional: Clear value to avoid confusion
+                // input.value = ''; 
+            }
+        });
+    }
+
+    radioRegular.addEventListener('change', toggleLectureType);
+    radioGuest.addEventListener('change', toggleLectureType);
+    
+    // Run on load to set initial state
+    toggleLectureType();
+
+    // 2. DYNAMIC SUBJECTS (AJAX)
+    const deptField = document.getElementById('id_department');
+    const yearField = document.getElementById('id_year');
+    const semField = document.getElementById('id_semester');
+    const subjectField = document.getElementById('id_subject');
+    const url = document.getElementById('bookingForm').getAttribute('data-subjects-url');
+
+    function loadSubjects() {
+        if (!deptField || !yearField || !semField) return;
+
+        const department = deptField.value;
+        const year = yearField.value;
+        const semester = semField.value;
+
+        if (department && year && semester) {
+            subjectField.innerHTML = '<option>Loading subjects...</option>';
+            subjectField.disabled = true;
+
+            fetch(`${url}?department=${encodeURIComponent(department)}&year=${encodeURIComponent(year)}&semester=${encodeURIComponent(semester)}`)
+                .then(response => response.json())
+                .then(data => {
+                    subjectField.innerHTML = '<option value="">---------</option>';
+                    if (data.length === 0) {
+                        subjectField.innerHTML += '<option value="" disabled>No subjects found</option>';
+                    }
+                    data.forEach(item => {
+                        const option = document.createElement('option');
+                        option.value = item.id; 
+                        option.textContent = item.name;
+                        subjectField.appendChild(option);
+                    });
+                    subjectField.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    subjectField.innerHTML = '<option value="">Error loading subjects</option>';
+                });
+        }
+    }
+
+    if(deptField) deptField.addEventListener('change', loadSubjects);
+    if(yearField) yearField.addEventListener('change', loadSubjects);
+    if(semField) semField.addEventListener('change', loadSubjects);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: classroom_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: classroom_availability
+      MYSQL_USER: classroom_user
+      MYSQL_PASSWORD: classroom_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - classroom_network
+
+  web:
+    build: .
+    container_name: classroom_django
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=secret-key-here-change-in-production
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=classroom_availability
+      - MYSQL_USER=classroom_user
+      - MYSQL_PASSWORD=classroom_pass
+      - ALLOWED_HOSTS=*
+    volumes:
+      - .:/app
+      - static_

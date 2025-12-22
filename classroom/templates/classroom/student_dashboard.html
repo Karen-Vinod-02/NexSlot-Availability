@@ -1,0 +1,215 @@
+{% extends 'classroom/base.html' %}
+
+{% block title %}Student Dashboard{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    
+    <div class="row align-items-end mb-5">
+        <div class="col-md-8">
+            <h6 class="text-uppercase text-muted fw-bold small letter-spacing-1 mb-1">Student Portal</h6>
+            <h2 class="fw-bold text-dark mb-0">Hello, {{ user.first_name|default:user.username }}</h2>
+            <p class="text-muted mt-2 mb-0 d-flex align-items-center">
+                <i class="fas fa-graduation-cap me-2"></i>
+                
+                {% if user.department %}
+                    {{ user.department }} 
+                {% else %}
+                    <span class="text-muted fst-italic">Department not set</span>
+                {% endif %}
+
+                {% if user.year %}
+                    &bull; Year {{ user.year }} 
+                {% endif %}
+                
+                {% if user.division %}
+                    &bull; Div {{ user.division }}
+                {% endif %}
+            </p>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+            <span class="badge bg-white text-dark border shadow-sm px-3 py-2 rounded-pill fw-normal">
+                <i class="far fa-calendar me-2 text-primary"></i>{% now "l, F jS" %}
+            </span>
+        </div>
+    </div>
+
+    <ul class="nav nav-pills mb-4" id="studentTabs" role="tablist">
+        <li class="nav-item me-2" role="presentation">
+            <button class="nav-link active px-4 rounded-pill" id="availability-tab" data-bs-toggle="tab" data-bs-target="#availability" type="button">
+                <i class="fas fa-search me-2"></i>Find Classroom
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link px-4 rounded-pill" id="feedback-tab" data-bs-toggle="tab" data-bs-target="#feedback" type="button">
+                <i class="fas fa-star me-2"></i>Feedback 
+                {% if completed_bookings %}
+                <span class="badge bg-danger rounded-circle ms-1 small">{{ completed_bookings|length }}</span>
+                {% endif %}
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="studentTabsContent">
+        
+        <div class="tab-pane fade show active" id="availability" role="tabpanel">
+            <div class="card shadow-sm border-0 rounded-4 overflow-hidden">
+                <div class="card-body p-4 p-lg-5">
+                    
+                    <div class="text-center mb-4">
+                        <h4 class="fw-bold">Find Availability</h4>
+                        <p class="text-muted">Search for lectures, labs, or available rooms.</p>
+                    </div>
+
+                    <form method="get" action="{% url 'classroom:view_availability' %}">
+                        <div class="row g-3 justify-content-center align-items-end">
+                            
+                            <div class="col-md-3">
+                                <label class="form-label text-muted small fw-bold">DATE</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="far fa-calendar text-muted"></i></span>
+                                    <input type="date" class="form-control bg-light border-start-0 ps-0" id="date" name="date" value="{{ request.GET.date|default:today }}">
+                                </div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label text-muted small fw-bold">SUBJECT</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="fas fa-book text-muted"></i></span>
+                                    <select class="form-select bg-light border-start-0 ps-0" name="subject" id="subject">
+                                        <option value="" selected>All Subjects</option>
+                                        {% for sub in subjects %}
+                                            <option value="{{ sub }}" {% if request.GET.subject == sub %}selected{% endif %}>{{ sub }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <div class="form-check form-switch p-2 bg-light rounded border d-flex align-items-center gap-2 mb-1" style="height: 42px;">
+                                    <input class="form-check-input ms-0" type="checkbox" id="guestOnly" name="is_guest" {% if request.GET.is_guest %}checked{% endif %}>
+                                    <label class="form-check-label small mb-0 fw-semibold text-muted" for="guestOnly">Guest Lectures Only</label>
+                                </div>
+                            </div>
+
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary w-100 py-2 shadow-sm">
+                                    Search
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="card-footer bg-light border-0 text-center py-3">
+                    <a href="{% url 'classroom:view_availability' %}" class="text-decoration-none text-muted small fw-bold hover-primary">
+                        View Full Schedule <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="feedback" role="tabpanel">
+            
+            {% if completed_bookings %}
+                <div class="row">
+                    {% for booking in completed_bookings %}
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card h-100 border-0 shadow-sm rounded-4 hover-lift">
+                            <div class="card-body p-4">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div>
+                                        {% if booking.is_guest_lecture %}
+                                            <span class="badge bg-warning text-dark mb-2 rounded-pill">Guest Lecture</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary bg-opacity-10 text-secondary mb-2 rounded-pill">Lecture</span>
+                                        {% endif %}
+                                        <h5 class="fw-bold mb-1 text-truncate" title="{{ booking.subject }}">{{ booking.subject }}</h5>
+                                        <p class="text-muted small mb-0">{{ booking.faculty_name }}</p>
+                                    </div>
+                                    <div class="text-end">
+                                        <div class="bg-light rounded-3 p-2 text-center border" style="min-width: 60px;">
+                                            <small class="d-block text-muted text-uppercase" style="font-size: 0.65rem;">Room</small>
+                                            <span class="fw-bold text-dark">{{ booking.classroom.room_number }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center mt-4">
+                                    <div class="small text-muted">
+                                        <i class="far fa-clock me-1"></i> {{ booking.slot }}
+                                    </div>
+
+                                    {% if booking.has_feedback %}
+                                        <button class="btn btn-success btn-sm rounded-pill px-3" disabled>
+                                            <i class="fas fa-check me-1"></i> Done
+                                        </button>
+                                    {% else %}
+                                        <a href="{% url 'classroom:submit_feedback' booking.id %}" class="btn btn-outline-primary btn-sm rounded-pill px-3">
+                                            Rate
+                                        </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-5">
+                    <div class="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                        <i class="fas fa-clipboard-check fa-2x text-muted"></i>
+                    </div>
+                    <h5 class="fw-bold text-muted">All Caught Up!</h5>
+                    <p class="text-muted small">You have no pending feedback.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Ensure Active Tab Text is White */
+    .nav-pills .nav-link.active {
+        background-color: var(--primary-color);
+        color: #ffffff !important; /* Force white text */
+        box-shadow: 0 4px 6px -1px rgba(51, 65, 85, 0.4);
+    }
+    
+    .nav-pills .nav-link {
+        color: var(--text-muted);
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .nav-pills .nav-link:hover:not(.active) {
+        color: var(--primary-color);
+        background-color: #f1f5f9;
+    }
+
+    /* Input Group Polish */
+    .input-group-text {
+        border-color: #e2e8f0;
+    }
+    .form-control, .form-select {
+        border-color: #e2e8f0;
+    }
+    .form-control:focus, .form-select:focus {
+        background-color: #fff;
+        border-color: var(--primary-color);
+        box-shadow: none; /* Clean look without glow */
+    }
+
+    .hover-lift {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .hover-lift:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+    }
+    
+    .hover-primary:hover {
+        color: var(--primary-color) !important;
+    }
+</style>
+{% endblock %}

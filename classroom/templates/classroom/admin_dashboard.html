@@ -1,0 +1,223 @@
+{% extends 'classroom/base.html' %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    
+    <div class="row align-items-center mb-5">
+        <div class="col-md-8">
+            <h6 class="text-uppercase text-muted fw-bold small letter-spacing-1 mb-1">System Administration</h6>
+            <h2 class="fw-bold text-dark mb-0">Dashboard Overview</h2>
+        </div>
+        <div class="col-md-4 text-md-end">
+             <div class="d-inline-flex align-items-center bg-white border px-3 py-2 rounded-pill shadow-sm">
+                <div class="bg-success rounded-circle me-2" style="width: 8px; height: 8px;"></div>
+                <span class="small fw-bold text-muted">System Online</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4 d-flex align-items-center">
+                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 50px; height: 50px;">
+                        <i class="fas fa-star fa-lg"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-1">Avg Feedback</h6>
+                        <h3 class="fw-bold mb-0 text-dark">{{ avg_rating|floatformat:1|default:"0.0" }}<span class="text-muted fs-6 ms-1">/ 5</span></h3>
+                        <small class="text-muted">{{ total_feedback }} responses</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4 d-flex align-items-center">
+                    <div class="bg-info bg-opacity-10 text-info rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 50px; height: 50px;">
+                        <i class="fas fa-user-tie fa-lg"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-1">Guest Lectures</h6>
+                        <h3 class="fw-bold mb-0 text-dark">{{ guest_avg|floatformat:1|default:"0.0" }}<span class="text-muted fs-6 ms-1">/ 5</span></h3>
+                        <small class="text-muted">{{ guest_feedback_count }} rated sessions</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 h-100 bg-dark text-white">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h6 class="text-white-50 text-uppercase small fw-bold mb-1">Configuration</h6>
+                            <h3 class="fw-bold mb-0">{{ classrooms.count }} <span class="fs-6 fw-normal text-white-50">Rooms</span></h3>
+                        </div>
+                        <i class="fas fa-server text-white-50 fa-lg"></i>
+                    </div>
+                    <div class="progress bg-white bg-opacity-10" style="height: 4px;">
+                        <div class="progress-bar bg-success" style="width: {{ classrooms.count }}%"></div>
+                    </div>
+                    <small class="text-white-50 mt-2 d-block">Capacity Limit: {{ config.classroom_limit }}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-bottom-0 pt-4 px-4 pb-0">
+                    <h5 class="fw-bold mb-0">Top Rated Sessions</h5>
+                </div>
+                <div class="card-body p-4">
+                    {% if top_lectures %}
+                        <div class="list-group list-group-flush">
+                            {% for booking in top_lectures %}
+                                <div class="list-group-item border-0 px-0 py-3">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center">
+                                            <div class="fw-bold text-muted me-3">0{{ forloop.counter }}</div>
+                                            <div>
+                                                <h6 class="fw-bold text-dark mb-0">{{ booking.subject }}</h6>
+                                                <small class="text-muted">{{ booking.faculty_name }}</small>
+                                            </div>
+                                        </div>
+                                        <div class="text-end">
+                                            <span class="badge bg-success bg-opacity-10 text-success rounded-pill">
+                                                {{ booking.avg_rating|floatformat:1 }} <i class="fas fa-star ms-1 small"></i>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5 text-muted">
+                            <i class="far fa-chart-bar fa-2x mb-3 opacity-25"></i>
+                            <p class="mb-0 small">No feedback data available yet.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-bottom-0 pt-4 px-4 pb-0 d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold mb-0">Classrooms</h5>
+                    <a href="{% url 'classroom:add_classroom' %}" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold">
+                        <i class="fas fa-plus me-1"></i> Add Room
+                    </a>
+                </div>
+                <div class="card-body p-4">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th class="ps-3 rounded-start text-muted small fw-bold border-0">Room</th>
+                                    <th class="text-muted small fw-bold border-0">Capacity</th>
+                                    <th class="text-muted small fw-bold border-0">Features</th>
+                                    <th class="text-end pe-3 rounded-end text-muted small fw-bold border-0">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for classroom in classrooms %}
+                                    <tr>
+                                        <td class="ps-3 fw-bold text-dark">R{{ classroom.room_number }}</td>
+                                        <td class="text-muted">{{ classroom.capacity }}</td>
+                                        <td>
+                                            {% if classroom.has_smartboard %}
+                                                <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 rounded-pill" style="font-size: 0.7rem;">
+                                                    <i class="fas fa-tv me-1"></i>Smartboard
+                                                </span>
+                                            {% else %}
+                                                <span class="text-muted small">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end pe-3">
+                                            <a href="{% url 'classroom:delete_classroom' classroom.id %}" 
+                                               class="btn btn-link text-danger p-0 opacity-50 hover-opacity-100"
+                                               onclick="return confirm('Permanently delete Room {{ classroom.room_number }}?')">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="4" class="text-center py-4 text-muted small">
+                                            No classrooms added. Click "Add Room" to start.
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 mt-4 overflow-hidden">
+        <div class="card-header bg-white border-bottom pt-4 px-4 pb-3">
+            <h5 class="fw-bold mb-0">Recent Bookings Log</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="ps-4 py-3 text-muted small fw-bold border-0">Date</th>
+                            <th class="py-3 text-muted small fw-bold border-0">Time</th>
+                            <th class="py-3 text-muted small fw-bold border-0">Subject / Event</th>
+                            <th class="py-3 text-muted small fw-bold border-0">Faculty</th>
+                            <th class="py-3 text-muted small fw-bold border-0">Room</th>
+                            <th class="py-3 text-muted small fw-bold border-0">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for booking in all_bookings %}
+                            <tr>
+                                <td class="ps-4 text-muted small fw-bold">{{ booking.booking_date|date:"M d" }}</td>
+                                <td class="text-muted small">{{ booking.slot }}</td>
+                                <td>
+                                    <div class="fw-bold text-dark small">{{ booking.subject }}</div>
+                                    {% if booking.is_guest_lecture %}
+                                        <span class="badge bg-warning text-dark" style="font-size: 0.6rem;">GUEST</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted small">{{ booking.faculty_name }}</td>
+                                <td><span class="badge bg-light text-dark border">R{{ booking.classroom.room_number }}</span></td>
+                                <td>
+                                    {% if booking.status == 'Confirmed' %}
+                                        <span class="badge bg-success bg-opacity-10 text-success rounded-pill small">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary rounded-pill small">{{ booking.status }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-5 text-muted">
+                                    No bookings found in the system.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<style>
+    .hover-opacity-100:hover { opacity: 1 !important; }
+    .metric-box h3 { letter-spacing: -1px; }
+</style>
+{% endblock %}
