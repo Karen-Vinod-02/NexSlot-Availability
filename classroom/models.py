@@ -148,19 +148,36 @@ class Feedback(models.Model):
         ordering = ['-created_at']
 
 class SystemConfig(models.Model):
+    # Functional Config
     class_slots = models.JSONField(default=list)
     classroom_limit = models.IntegerField(default=100)
     updated_at = models.DateTimeField(auto_now=True)
     
+    # --- BRANDING / CUSTOMIZATION ---
+    site_name = models.CharField(max_length=50, default="Classroom", help_text="The name displayed in the navbar")
+    
+    # --- FIX: Changed to FileField to bypass PIL/Numpy crash ---
+    site_logo = models.FileField(upload_to='branding/', null=True, blank=True, help_text="Transparent PNG recommended")
+    
+    primary_color = models.CharField(max_length=7, default="#2563EB", help_text="Hex code (e.g. #2563EB)")
+    accent_color = models.CharField(max_length=7, default="#F59E0B", blank=True, null=True, help_text="Optional Accent Color")
+    secondary_color = models.CharField(max_length=7, default="#F3F4F6", help_text="Hex code (e.g. #F3F4F6)")
+
     class Meta:
         db_table = 'config'
     
     @classmethod
     def get_config(cls):
+        # Ensure only one config row exists (ID=1)
         config, created = cls.objects.get_or_create(pk=1)
         if created:
             config.class_slots = [
-                "8:00 - 9:30", "9:40 - 11:10", "11:20 - 12:50", "1:30 - 3:00", "3:10 - 4:40"
+                "8:00 - 9:30", "9:40 - 11:10", "11:20 - 12:50", "13:30 - 15:00", "15:10 - 16:40"
             ]
             config.save()
         return config
+
+    def save(self, *args, **kwargs):
+        # Force ID to 1 to maintain Singleton pattern
+        self.pk = 1
+        super().save(*args, **kwargs)

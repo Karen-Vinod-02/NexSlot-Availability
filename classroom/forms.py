@@ -148,8 +148,6 @@ class BookingForm(forms.ModelForm):
 
     class Meta:
         model = Booking
-        # --- FIXED: REMOVED 'faculty_name' FROM THIS LIST ---
-        # The view (views.py) handles setting the faculty name automatically.
         fields = ['classroom', 'booking_date', 'slot', 'subject',
                   'is_guest_lecture', 'lecture_title', 'guest_speaker', 
                   'department', 'year', 'division', 'semester']
@@ -210,3 +208,41 @@ class FeedbackForm(forms.ModelForm):
             'rating': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'max': 5}),
             'comments': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
+
+# --- NEW: SYSTEM BRANDING FORM ---
+class SystemBrandingForm(forms.ModelForm):
+    # Security Field: Confirm Password
+    confirm_password = forms.CharField(
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Required to save changes'}),
+        label="Admin Password Verification",
+        required=True
+    )
+
+    class Meta:
+        model = SystemConfig
+        fields = ['site_name', 'site_logo', 'primary_color', 'accent_color', 'secondary_color']
+        widgets = {
+            'site_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'primary_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control form-control-color'}),
+            'accent_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control form-control-color', 'title': 'Optional Accent'}),
+            'secondary_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control form-control-color'}),
+            'site_logo': forms.FileInput(attrs={'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        # Pop 'user' before init so the parent class doesn't choke on it
+        self.user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+        
+        # Make specific fields optional in the form UI
+        self.fields['site_name'].required = False
+        self.fields['primary_color'].required = False
+        self.fields['accent_color'].required = False
+        self.fields['secondary_color'].required = False
+        self.fields['site_logo'].required = False
+
+    def clean_confirm_password(self):
+        password = self.cleaned_data.get('confirm_password')
+        if not self.user or not self.user.check_password(password):
+            raise forms.ValidationError("Incorrect password. Changes rejected.")
+        return password

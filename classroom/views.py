@@ -4,9 +4,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Q, Avg, Count
 from django.http import JsonResponse
-from datetime import date
+from datetime import date, datetime
 from .models import User, Classroom, Booking, Feedback, SystemConfig, Subject, AuthorizedEmail
-from .forms import UserRegistrationForm, UserLoginForm, ForgotPasswordForm, ClassroomForm, BookingForm, FeedbackForm, get_allowed_divisions, get_allowed_semesters
+from .forms import UserRegistrationForm, UserLoginForm, ForgotPasswordForm, ClassroomForm, BookingForm, FeedbackForm, SystemBrandingForm, get_allowed_divisions, get_allowed_semesters
 
 # -------------------------
 # AUTHENTICATION VIEWS
@@ -19,13 +19,10 @@ def user_login(request):
     if request.method == 'POST':
         form = UserLoginForm(request, data=request.POST)
         if form.is_valid():
-            # The form field is named 'username' but contains the email string
             email_credential = form.cleaned_data.get('username')
             password = form.cleaned_data.get('password')
             
-            # --- FIX: DIRECT AUTHENTICATION ---
-            # Instead of looking up the user object first, we pass the email 
-            # directly to authenticate().
+            # Direct Authentication using Email
             user = authenticate(request, username=email_credential, password=password)
             
             if user is not None:
@@ -33,9 +30,7 @@ def user_login(request):
                 messages.success(request, f'Welcome, {user.first_name}!')
                 return redirect('classroom:dashboard')
             else:
-                # If auth fails, check if it's a first-time user for a better error message
                 if AuthorizedEmail.objects.filter(email=email_credential).exists():
-                     # If they are authorized but auth failed, they likely haven't set a password yet
                      messages.error(request, "Invalid credentials. If this is your first time, please activate your account.")
                 else:
                      messages.error(request, 'Invalid email or password.')
@@ -52,11 +47,8 @@ def forgot_password(request):
     If email is in AuthorizedEmail, allow setting password immediately.
     """
     if request.method == 'POST':
-        # reusing the Registration Form because it already has password fields
         form = UserRegistrationForm(request.POST) 
         
-        # We manually validate because UserRegistrationForm expects a unique email check
-        # which might fail if the User object already exists.
         email = request.POST.get('email')
         password = request.POST.get('password1')
         confirm = request.POST.get('password2')
@@ -70,18 +62,13 @@ def forgot_password(request):
             return render(request, 'classroom/forgot_password.html', {'form': UserRegistrationForm(initial={'email': email})})
 
         try:
-            # 1. Check Authority
             auth_entry = AuthorizedEmail.objects.get(email=email)
-
-            # 2. Get or Create User
             user, created = User.objects.get_or_create(username=email, email=email)
 
-            # 3. Update Attributes
             user.first_name = auth_entry.first_name
             user.last_name = auth_entry.last_name
             user.role = auth_entry.role
 
-            # 4. Decouple Faculty Logic
             if user.role == 'Student':
                 user.department = auth_entry.department
                 user.year = auth_entry.year
@@ -91,7 +78,6 @@ def forgot_password(request):
                 user.year = None
                 user.division = None
             
-            # 5. SET PASSWORD DIRECTLY
             user.set_password(password)
             user.save()
 
@@ -104,7 +90,6 @@ def forgot_password(request):
             return render(request, 'classroom/forgot_password.html', {'form': UserRegistrationForm(initial={'email': email})})
 
     else:
-        # We use the Registration form here because it has the Password boxes we need
         form = UserRegistrationForm()  
     return render(request, 'classroom/forgot_password.html', {'form': form})
 
@@ -137,66 +122,180 @@ def student_dashboard(request):
         messages.error(request, 'Access denied')
         return redirect('classroom:dashboard')
     
-    today = date.today().isoformat()
-    completed_bookings = Booking.objects.filter(
-        Q(booking_date__lt=today) | 
-        Q(booking_date=today, status='Completed')
-    )
+    today = date.today()
+    now = datetime.now()
     
-    eligible_bookings = []
-    for booking in completed_bookings:
-        # Check if booking is relevant to this student
+    # 1. SETUP DATA FOR DROPDOWNS
+    student_subjects = Subject.objects.filter(
+        department=request.user.department,
+        year=request.user.year
+    ).order_by('semester', 'name')
+
+    # 2. SEARCH LOGIC (If user clicked "Search")
+    search_results = None
+    is_searching = False
+    
+    if request.GET.get('action') == 'search':
+        is_searching = True
+        search_date = request.GET.get('date', today.isoformat())
+        search_subject = request.GET.get('subject')
+        guest_only = request.GET.get('guest_only')
+        
+        # Start with all bookings for that date
+        query = Booking.objects.filter(booking_date=search_date).select_related('classroom', 'faculty')
+        
+        if search_subject:
+             try:
+                 subj_obj = Subject.objects.get(id=search_subject)
+                 query = query.filter(subject=subj_obj.name)
+             except:
+                 pass
+        
+        if guest_only:
+            query = query.filter(is_guest_lecture=True)
+            
+        search_results = query
+
+    # 3. MY SCHEDULE LOGIC (Timeline)
+    # Fetch ALL relevant bookings for TODAY
+    my_bookings = Booking.objects.filter(booking_date=today).order_by('slot')
+    
+    timeline = []
+    for booking in my_bookings:
+        # Filter relevance (Student's dept/year/div)
+        is_relevant = False
         if booking.is_guest_lecture:
-            # Guest lectures: Open to all OR specific department
             if not booking.department or booking.department == request.user.department:
-                eligible_bookings.append(booking)
+                is_relevant = True
         else:
-            # Regular lectures: Must match Dept, Year, and Division
             if (booking.department == request.user.department and 
                 booking.year == request.user.year and
                 (not booking.division or booking.division == request.user.division)):
-                eligible_bookings.append(booking)
-    
-    # Check if feedback is already submitted
-    for booking in eligible_bookings:
-        booking.has_feedback = Feedback.objects.filter(
-            booking=booking, 
-            student=request.user
-        ).exists()
-    
+                is_relevant = True
+        
+        if is_relevant:
+            status = "Upcoming"
+            can_feedback = False
+            
+            try:
+                # Parse slot times (e.g., "8:00 - 9:30")
+                start_str, end_str = booking.slot.split(' - ')
+                start_time = datetime.strptime(start_str, "%H:%M").time()
+                end_time = datetime.strptime(end_str, "%H:%M").time()
+                
+                current_time = now.time()
+                
+                if current_time < start_time:
+                    status = "Upcoming"
+                elif start_time <= current_time <= end_time:
+                    status = "Live Now"
+                    can_feedback = True
+                else:
+                    status = "Completed"
+                    can_feedback = True
+            except:
+                status = "Scheduled"
+
+            # Check if feedback already exists
+            has_feedback = Feedback.objects.filter(booking=booking, student=request.user).exists()
+            
+            timeline.append({
+                'obj': booking,
+                'status': status,
+                'can_feedback': can_feedback,
+                'has_feedback': has_feedback
+            })
+
+    # Feedback Form for the Modal
+    feedback_form = FeedbackForm()
+
     context = {
         'today': today,
-        'completed_bookings': eligible_bookings,
-        'classrooms': Classroom.objects.all(),
+        'student_subjects': student_subjects,
+        'timeline': timeline,
+        'search_results': search_results,
+        'is_searching': is_searching,
+        'feedback_form': feedback_form,
+        'user': request.user,
         'config': SystemConfig.get_config(),
     }
     return render(request, 'classroom/student_dashboard.html', context)
 
 @login_required
 def faculty_dashboard(request):
+    """
+    Unified Faculty Dashboard: Shows Availability Grid + Booking Form + History
+    """
     if request.user.role != 'Faculty':
         messages.error(request, 'Access denied')
         return redirect('classroom:dashboard')
     
-    my_bookings = Booking.objects.filter(faculty=request.user)
+    # 1. Date Selection
+    selected_date_str = request.GET.get('date', date.today().isoformat())
+    selected_date = datetime.strptime(selected_date_str, "%Y-%m-%d").date()
     
-    for booking in my_bookings:
-        booking.avg_rating = booking.get_average_rating()
-        booking.feedback_count = booking.feedbacks.count()
+    # 2. Availability Grid Logic
+    classrooms = Classroom.objects.all()
+    config = SystemConfig.get_config()
     
+    availability_data = []
+    for classroom in classrooms:
+        classroom_data = {'classroom': classroom, 'slots': {}}
+        for slot in config.class_slots:
+            # Look for existing booking
+            booking = Booking.objects.filter(
+                classroom=classroom,
+                booking_date=selected_date,
+                slot=slot
+            ).first()
+            classroom_data['slots'][slot] = booking
+        availability_data.append(classroom_data)
+
+    # 3. "My Bookings" Side Panel
+    my_bookings = Booking.objects.filter(faculty=request.user).order_by('-booking_date')[:5]
+    for b in my_bookings:
+        b.avg_rating = b.get_average_rating()
+    
+    # 4. Booking Form (for the Modal)
+    booking_form = BookingForm(initial={'booking_date': selected_date})
+
     context = {
+        'availability_data': availability_data,
+        'config': config,
+        'selected_date': selected_date_str,
         'my_bookings': my_bookings,
-        'classrooms': Classroom.objects.all(),
-        'config': SystemConfig.get_config(),
+        'form': booking_form,
     }
     return render(request, 'classroom/faculty_dashboard.html', context)
 
 @login_required
 def admin_dashboard(request):
+    """
+    Secure Admin Dashboard with Analytics & Configuration
+    """
+    # 1. SECURITY CHECK
     if request.user.role != 'Admin' and not request.user.is_superuser:
-        messages.error(request, 'Access denied')
+        messages.error(request, 'Access denied. Administrator privileges required.')
         return redirect('classroom:dashboard')
     
+    config = SystemConfig.get_config()
+
+    # 2. HANDLE BRANDING UPDATES
+    if request.method == 'POST' and 'update_branding' in request.POST:
+        # Pass request.FILES for the logo upload and user for password check
+        branding_form = SystemBrandingForm(request.POST, request.FILES, instance=config, user=request.user)
+        
+        if branding_form.is_valid():
+            branding_form.save()
+            messages.success(request, 'System branding updated successfully.')
+            return redirect('classroom:admin_dashboard')
+        else:
+            messages.error(request, 'Update failed. Check your password or data.')
+    else:
+        # Initial form load
+        branding_form = SystemBrandingForm(instance=config)
+    
+    # 3. ANALYTICS DATA
     all_bookings = Booking.objects.all()
     avg_rating = Feedback.objects.aggregate(Avg('rating'))['rating__avg']
     
@@ -221,7 +320,8 @@ def admin_dashboard(request):
         'guest_feedback_count': guest_feedback.count(),
         'regular_feedback_count': regular_feedback.count(),
         'top_lectures': top_lectures,
-        'config': SystemConfig.get_config(),
+        'config': config,
+        'branding_form': branding_form, # Pass the form to template
     }
     return render(request, 'classroom/admin_dashboard.html', context)
 
@@ -231,6 +331,9 @@ def admin_dashboard(request):
 
 @login_required
 def create_booking(request):
+    """
+    Handles POST requests from the Faculty Dashboard Modal
+    """
     if request.user.role != 'Faculty':
         messages.error(request, 'Only faculty can create bookings')
         return redirect('classroom:dashboard')
@@ -241,51 +344,51 @@ def create_booking(request):
             booking = form.save(commit=False)
             booking.faculty = request.user
             
-            # Use faculty name if not manually entered
             if not booking.faculty_name:
                 booking.faculty_name = f"{request.user.first_name} {request.user.last_name}"
 
             if booking.is_guest_lecture:
-                if not booking.lecture_title:
-                    messages.error(request, "Lecture Title is required for Guest Lectures.")
-                    return render(request, 'classroom/create_booking.html', {'form': form})
+                if not booking.lecture_title or not booking.guest_speaker:
+                    messages.error(request, "Guest lectures require a Title and Speaker.")
+                    return redirect('classroom:faculty_dashboard')
+                
+                # Manual capture of guest fields
+                booking.department = request.POST.get('guest_department')
+                booking.year = request.POST.get('guest_year')
+                booking.subject = None
+                booking.division = None
+                booking.semester = None
+
             else:
                 subject_id = form.cleaned_data.get('subject')
-                if not subject_id:
-                    messages.error(request, "Subject is required for Regular Lectures.")
-                    return render(request, 'classroom/create_booking.html', {'form': form})
-                
-                # Handle Subject Logic (ID vs Name)
                 try:
                     if str(subject_id).isdigit():
-                          subject_obj = Subject.objects.get(id=int(subject_id))
-                          booking.subject = subject_obj.name
+                        booking.subject = Subject.objects.get(id=int(subject_id)).name
                     else:
-                          booking.subject = subject_id
-                except (Subject.DoesNotExist, ValueError):
+                        booking.subject = subject_id
+                except:
                     booking.subject = subject_id
 
-            conflict = Booking.objects.filter(
-                classroom=booking.classroom,
-                booking_date=booking.booking_date,
-                slot=booking.slot
-            ).exists()
-            
-            if conflict:
-                messages.error(request, 'This classroom is already booked for this slot!')
+            # Conflict Check
+            if Booking.objects.filter(classroom=booking.classroom, booking_date=booking.booking_date, slot=booking.slot).exists():
+                messages.error(request, 'Slot already booked!')
             else:
                 booking.save()
-                messages.success(request, 'Booking created successfully!')
-                return redirect('classroom:faculty_dashboard')
+                messages.success(request, 'Booking confirmed!')
+                
+            return redirect('classroom:faculty_dashboard')
         else:
-            messages.error(request, 'Please correct the errors below.')
-    else:
-        form = BookingForm()
+            messages.error(request, 'Booking failed. Please check details.')
+            return redirect('classroom:faculty_dashboard')
     
-    return render(request, 'classroom/create_booking.html', {'form': form})
+    return redirect('classroom:faculty_dashboard')
 
 @login_required
 def cancel_booking(request, booking_id):
+    """
+    Allows faculty to cancel their own bookings.
+    Frees up the slot by deleting the record.
+    """
     booking = get_object_or_404(Booking, id=booking_id)
     if request.user.role != 'Faculty' or booking.faculty != request.user:
         messages.error(request, 'You cannot cancel this booking')
@@ -350,6 +453,7 @@ def delete_classroom(request, classroom_id):
 
 @login_required
 def view_availability(request):
+    # This view is now redundant for faculty but kept for students/admin search
     selected_date = request.GET.get('date', date.today().isoformat())
     classrooms = Classroom.objects.all()
     config = SystemConfig.get_config()

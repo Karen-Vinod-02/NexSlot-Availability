@@ -3,28 +3,65 @@
 
 {% block title %}Book a Classroom{% endblock %}
 
+{% block extra_css %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+    body {
+        font-family: 'Inter', sans-serif;
+        background-color: #F3F4F6;
+    }
+    .card {
+        border-radius: 20px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01) !important;
+    }
+    .btn-check:checked + .btn-light {
+        background-color: #2563EB; /* Modern Primary Blue */
+        color: white;
+        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+        border-color: #2563EB;
+    }
+    .form-control, .form-select {
+        border-radius: 10px;
+        padding: 0.6rem 1rem;
+        border-color: #E5E7EB;
+    }
+    .form-control:focus, .form-select:focus {
+        border-color: #2563EB;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+    /* Smooth fade animation for sections */
+    #regular_section, #guest_section {
+        animation: fadeIn 0.3s ease-in-out;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container py-5">
     <div class="row justify-content-center">
         <div class="col-lg-8">
-            <div class="card shadow-lg border-0 rounded-4">
+            <div class="card border-0">
                 
                 <div class="card-header bg-white border-bottom-0 pt-5 pb-0 px-5 text-center">
                     <div class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary rounded-circle mb-3" style="width: 64px; height: 64px;">
                         <i class="fas fa-calendar-plus fa-2x"></i>
                     </div>
-                    <h3 class="fw-bold mb-1">Book a Classroom</h3>
+                    <h3 class="fw-bold mb-1 text-dark">Book a Classroom</h3>
                     <p class="text-muted">Schedule a new session</p>
                     
                     <div class="d-flex justify-content-center mt-4 mb-2">
-                        <div class="btn-group p-1 bg-light rounded-pill" role="group">
+                        <div class="btn-group p-1 bg-light rounded-pill border" role="group">
                             <input type="radio" class="btn-check" name="type_selector" id="type_regular" value="regular" autocomplete="off" checked>
-                            <label class="btn btn-sm btn-light rounded-pill px-4 fw-bold border-0" for="type_regular" id="label_regular">
+                            <label class="btn btn-sm btn-light rounded-pill px-4 fw-bold border-0 transition-all" for="type_regular" id="label_regular">
                                 Regular Lecture
                             </label>
 
                             <input type="radio" class="btn-check" name="type_selector" id="type_guest" value="guest" autocomplete="off">
-                            <label class="btn btn-sm btn-light rounded-pill px-4 fw-bold border-0" for="type_guest" id="label_guest">
+                            <label class="btn btn-sm btn-light rounded-pill px-4 fw-bold border-0 transition-all" for="type_guest" id="label_guest">
                                 Guest Lecture
                             </label>
                         </div>
@@ -34,7 +71,7 @@
                 <div class="card-body p-5 pt-4">
                     
                     {% if form.errors %}
-                        <div class="alert alert-danger rounded-3 mb-4">
+                        <div class="alert alert-danger rounded-3 mb-4 border-0 shadow-sm">
                             <h6 class="fw-bold mb-1"><i class="fas fa-exclamation-circle me-2"></i>Please correct the following:</h6>
                             <ul class="mb-0 small ps-3">
                                 {% for field, errors in form.errors.items %}
@@ -65,11 +102,11 @@
                             </div>
                         </div>
 
-                        <hr class="border-light mb-4">
+                        <hr class="border-light mb-4 opacity-50">
 
                         <div id="regular_section">
                             <h6 class="text-primary fw-bold text-uppercase small letter-spacing-1 mb-3">
-                                <i class="fas fa-book-reader me-2"></i>Class Details
+                                <i class="fas fa-book-reader me-2"></i>Academic Details
                             </h6>
                             <div class="row g-3">
                                 <div class="col-md-4">
@@ -91,7 +128,7 @@
                         </div>
 
                         <div id="guest_section" style="display: none;">
-                            <h6 class="text-success fw-bold text-uppercase small letter-spacing-1 mb-3">
+                            <h6 class="text-warning text-dark fw-bold text-uppercase small letter-spacing-1 mb-3">
                                 <i class="fas fa-user-tie me-2"></i>Guest Event Details
                             </h6>
                             
@@ -105,7 +142,7 @@
                             
                             <div class="row g-3">
                                 <div class="col-md-6">
-                                    <label class="form-label text-muted small">Target Department (Optional)</label>
+                                    <label class="form-label text-muted small fw-bold">Target Department</label>
                                     <select name="guest_department" class="form-select">
                                         <option value="">All Departments</option>
                                         <option value="Computer Engineering">Computer Engineering</option>
@@ -116,7 +153,7 @@
                                     </select>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label text-muted small">Target Year (Optional)</label>
+                                    <label class="form-label text-muted small fw-bold">Target Year</label>
                                     <select name="guest_year" class="form-select">
                                         <option value="">Open to all</option>
                                         <option value="FE">First Year (FE)</option>
@@ -130,7 +167,7 @@
 
                         <div class="d-grid gap-2 mt-5">
                             <button type="submit" class="btn btn-primary py-2 fw-bold shadow-sm rounded-3">
-                                <i class="fas fa-check-circle me-2"></i>Confirm Booking
+                                <i class="fas fa-check-circle me-2"></i> Confirm Booking
                             </button>
                             <a href="{% url 'classroom:faculty_dashboard' %}" class="btn btn-light text-muted py-2 fw-semibold rounded-3">
                                 Cancel
@@ -142,21 +179,6 @@
         </div>
     </div>
 </div>
-
-<style>
-    .btn-check:checked + .btn-light {
-        background-color: var(--primary-color);
-        color: white;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    #regular_section, #guest_section {
-        animation: fadeIn 0.3s ease-in-out;
-    }
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(5px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-</style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -175,7 +197,7 @@ document.addEventListener('DOMContentLoaded', function() {
             sectionRegular.style.display = 'none';
             sectionGuest.style.display = 'block';
             
-            // Check the hidden box so Backend knows it's a guest lecture
+            // Sync hidden box
             if(checkboxIsGuest) checkboxIsGuest.checked = true;
             
             setRequired(sectionRegular, false);
@@ -185,7 +207,7 @@ document.addEventListener('DOMContentLoaded', function() {
             sectionGuest.style.display = 'none';
             sectionRegular.style.display = 'block';
             
-            // Uncheck the hidden box
+            // Sync hidden box
             if(checkboxIsGuest) checkboxIsGuest.checked = false;
 
             setRequired(sectionGuest, false);
@@ -196,17 +218,14 @@ document.addEventListener('DOMContentLoaded', function() {
     function setRequired(container, isRequired) {
         const inputs = container.querySelectorAll('input, select');
         inputs.forEach(input => {
-            // Skip optional manual fields
+            // SKIP optional/manual fields
             if (input.name === 'guest_department' || input.name === 'guest_year') return;
-            // Skip division (often optional)
-            if (input.name === 'division') return;
+            if (input.name === 'division') return; 
 
             if (isRequired) {
                 input.setAttribute('required', '');
             } else {
                 input.removeAttribute('required');
-                // Optional: Clear value to avoid confusion
-                // input.value = ''; 
             }
         });
     }
@@ -214,10 +233,11 @@ document.addEventListener('DOMContentLoaded', function() {
     radioRegular.addEventListener('change', toggleLectureType);
     radioGuest.addEventListener('change', toggleLectureType);
     
-    // Run on load to set initial state
+    // Initialize on load
     toggleLectureType();
 
     // 2. DYNAMIC SUBJECTS (AJAX)
+    // These IDs (id_department, etc.) are standard Django Crispy Forms IDs.
     const deptField = document.getElementById('id_department');
     const yearField = document.getElementById('id_year');
     const semField = document.getElementById('id_semester');
@@ -225,23 +245,27 @@ document.addEventListener('DOMContentLoaded', function() {
     const url = document.getElementById('bookingForm').getAttribute('data-subjects-url');
 
     function loadSubjects() {
+        // Only run if elements exist
         if (!deptField || !yearField || !semField) return;
 
         const department = deptField.value;
         const year = yearField.value;
         const semester = semField.value;
 
-        if (department && year && semester) {
-            subjectField.innerHTML = '<option>Loading subjects...</option>';
-            subjectField.disabled = true;
+        // Visual feedback
+        subjectField.innerHTML = '<option>Loading...</option>';
+        subjectField.disabled = true;
 
+        if (department && year && semester) {
             fetch(`${url}?department=${encodeURIComponent(department)}&year=${encodeURIComponent(year)}&semester=${encodeURIComponent(semester)}`)
                 .then(response => response.json())
                 .then(data => {
                     subjectField.innerHTML = '<option value="">---------</option>';
+                    
                     if (data.length === 0) {
                         subjectField.innerHTML += '<option value="" disabled>No subjects found</option>';
                     }
+                    
                     data.forEach(item => {
                         const option = document.createElement('option');
                         option.value = item.id; 
@@ -254,9 +278,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('Error:', error);
                     subjectField.innerHTML = '<option value="">Error loading subjects</option>';
                 });
+        } else {
+            subjectField.innerHTML = '<option value="">Select Dept, Year & Sem first</option>';
         }
     }
 
+    // Attach listeners
     if(deptField) deptField.addEventListener('change', loadSubjects);
     if(yearField) yearField.addEventListener('change', loadSubjects);
     if(semField) semField.addEventListener('change', loadSubjects);
