@@ -5,6 +5,8 @@ from django.contrib import messages
 from django.db.models import Q, Avg, Count
 from django.http import JsonResponse
 from datetime import date, datetime
+from django.utils import timezone
+from datetime import date, datetime, timedelta
 from .models import User, Classroom, Booking, Feedback, SystemConfig, Subject, AuthorizedEmail
 from .forms import UserRegistrationForm, UserLoginForm, ForgotPasswordForm, ClassroomForm, BookingForm, FeedbackForm, SystemBrandingForm, get_allowed_divisions, get_allowed_semesters
 
@@ -31,9 +33,9 @@ def user_login(request):
                 return redirect('classroom:dashboard')
             else:
                 if AuthorizedEmail.objects.filter(email=email_credential).exists():
-                     messages.error(request, "Invalid credentials. If this is your first time, please activate your account.")
+                      messages.error(request, "Invalid credentials. If this is your first time, please activate your account.")
                 else:
-                     messages.error(request, 'Invalid email or password.')
+                      messages.error(request, 'Invalid email or password.')
         else:
             messages.error(request, 'Invalid email format or password')
     else:
@@ -122,8 +124,9 @@ def student_dashboard(request):
         messages.error(request, 'Access denied')
         return redirect('classroom:dashboard')
     
-    today = date.today()
-    now = datetime.now()
+    # [FIX 2] Use timezone-aware date and time
+    current_datetime = timezone.localtime() 
+    today = current_datetime.date()
     
     # 1. SETUP DATA FOR DROPDOWNS
     student_subjects = Subject.objects.filter(
@@ -141,7 +144,6 @@ def student_dashboard(request):
         search_subject = request.GET.get('subject')
         guest_only = request.GET.get('guest_only')
         
-        # Start with all bookings for that date
         query = Booking.objects.filter(booking_date=search_date).select_related('classroom', 'faculty')
         
         if search_subject:
@@ -157,12 +159,10 @@ def student_dashboard(request):
         search_results = query
 
     # 3. MY SCHEDULE LOGIC (Timeline)
-    # Fetch ALL relevant bookings for TODAY
     my_bookings = Booking.objects.filter(booking_date=today).order_by('slot')
     
     timeline = []
     for booking in my_bookings:
-        # Filter relevance (Student's dept/year/div)
         is_relevant = False
         if booking.is_guest_lecture:
             if not booking.department or booking.department == request.user.department:
@@ -178,16 +178,17 @@ def student_dashboard(request):
             can_feedback = False
             
             try:
-                # Parse slot times (e.g., "8:00 - 9:30")
+                # [FIX 3] Compare time objects correctly using local time
                 start_str, end_str = booking.slot.split(' - ')
                 start_time = datetime.strptime(start_str, "%H:%M").time()
                 end_time = datetime.strptime(end_str, "%H:%M").time()
                 
-                current_time = now.time()
+                # Get current time in local timezone
+                now_time = current_datetime.time()
                 
-                if current_time < start_time:
+                if now_time < start_time:
                     status = "Upcoming"
-                elif start_time <= current_time <= end_time:
+                elif start_time <= now_time <= end_time:
                     status = "Live Now"
                     can_feedback = True
                 else:
@@ -196,7 +197,6 @@ def student_dashboard(request):
             except:
                 status = "Scheduled"
 
-            # Check if feedback already exists
             has_feedback = Feedback.objects.filter(booking=booking, student=request.user).exists()
             
             timeline.append({
@@ -206,7 +206,6 @@ def student_dashboard(request):
                 'has_feedback': has_feedback
             })
 
-    # Feedback Form for the Modal
     feedback_form = FeedbackForm()
 
     context = {
@@ -223,18 +222,18 @@ def student_dashboard(request):
 
 @login_required
 def faculty_dashboard(request):
-    """
-    Unified Faculty Dashboard: Shows Availability Grid + Booking Form + History
-    """
     if request.user.role != 'Faculty':
         messages.error(request, 'Access denied')
         return redirect('classroom:dashboard')
     
-    # 1. Date Selection
-    selected_date_str = request.GET.get('date', date.today().isoformat())
+    # 1. Get Aware Current Time
+    current_datetime = timezone.localtime()
+    
+    # 2. Date Selection
+    selected_date_str = request.GET.get('date', current_datetime.date().isoformat())
     selected_date = datetime.strptime(selected_date_str, "%Y-%m-%d").date()
     
-    # 2. Availability Grid Logic
+    # 3. Availability Grid Logic
     classrooms = Classroom.objects.all()
     config = SystemConfig.get_config()
     
@@ -242,21 +241,50 @@ def faculty_dashboard(request):
     for classroom in classrooms:
         classroom_data = {'classroom': classroom, 'slots': {}}
         for slot in config.class_slots:
-            # Look for existing booking
             booking = Booking.objects.filter(
                 classroom=classroom,
                 booking_date=selected_date,
                 slot=slot
             ).first()
+            
+            # --- FIX: ROBUST CANCELLATION LOGIC ---
+            if booking:
+                booking.is_cancellable = False # Default
+                
+                # Logic: Compare exact datetimes
+                try:
+                    # 1. Parse the start time (e.g., "1:30")
+                    start_str = booking.slot.split('-')[0].strip()
+                    parsed_time = datetime.strptime(start_str, "%H:%M").time()
+                    
+                    # 2. Fix 12-hour format ambiguity (Convert 1:00-6:00 to PM)
+                    # Assumption: College lectures won't happen at 1 AM - 6 AM.
+                    if 1 <= parsed_time.hour <= 6:
+                        parsed_time = parsed_time.replace(hour=parsed_time.hour + 12)
+                    
+                    # 3. Create a full timezone-aware datetime for the booking
+                    booking_dt = datetime.combine(booking.booking_date, parsed_time)
+                    booking_dt = timezone.make_aware(booking_dt, timezone.get_current_timezone())
+                    
+                    # 4. Compare with current time
+                    if booking_dt > current_datetime:
+                        booking.is_cancellable = True
+                        
+                except Exception as e:
+                    print(f"Time parsing error: {e}")
+                    # Fallback: if strictly future date, allow cancel
+                    if booking.booking_date > current_datetime.date():
+                        booking.is_cancellable = True
+
             classroom_data['slots'][slot] = booking
         availability_data.append(classroom_data)
 
-    # 3. "My Bookings" Side Panel
+    # 4. "My Bookings" Side Panel
     my_bookings = Booking.objects.filter(faculty=request.user).order_by('-booking_date')[:5]
     for b in my_bookings:
         b.avg_rating = b.get_average_rating()
     
-    # 4. Booking Form (for the Modal)
+    # 5. Booking Form (for the Modal)
     booking_form = BookingForm(initial={'booking_date': selected_date})
 
     context = {

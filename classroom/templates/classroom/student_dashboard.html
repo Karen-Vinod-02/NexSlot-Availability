@@ -3,6 +3,93 @@
 
 {% block title %}Student Workspace{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* --- TIMELINE STYLES --- */
+    /* Custom Pulse Animation for Live Classes */
+    @keyframes pulse-green {
+        0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+        70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+    .animate-pulse { animation: pulse-green 2s infinite; }
+    
+    .transition-hover:hover { transform: translateY(-3px); transition: transform 0.2s ease; }
+    .timeline-item { transition: all 0.3s ease; }
+    .avatar-icon { width: 24px; height: 24px; line-height: 24px; font-size: 0.75rem; }
+    
+    /* Status Colors */
+    .status-line-live { background-color: #10b981 !important; } /* Green */
+    .status-line-upcoming { background-color: #3b82f6 !important; } /* Blue */
+    .status-line-completed { background-color: #cbd5e1 !important; } /* Gray */
+
+    /* --- AWARD-WINNING FEEDBACK UI --- */
+    .modal-content {
+        border: none;
+        border-radius: 28px; /* Super rounded modern look */
+        overflow: hidden;
+    }
+
+    /* Star Rating Widget (Pure CSS Interactive) */
+    .star-rating-widget {
+        display: flex;
+        flex-direction: row-reverse; /* Magic trick: allows selecting previous siblings */
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 0;
+    }
+    .star-rating-widget input { display: none; }
+    
+    .star-rating-widget label {
+        font-size: 2.5rem;
+        color: #e2e8f0; /* Inactive Gray */
+        cursor: pointer;
+        transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), color 0.2s;
+    }
+
+    /* Hover & Checked States */
+    .star-rating-widget input:checked ~ label,
+    .star-rating-widget label:hover,
+    .star-rating-widget label:hover ~ label {
+        color: #fbbf24; /* Amber-400 */
+    }
+    
+    /* Pop animation on hover */
+    .star-rating-widget label:hover {
+        transform: scale(1.2);
+    }
+
+    /* Textarea Polish */
+    .feedback-textarea {
+        background-color: #f8fafc;
+        border: 2px solid transparent;
+        border-radius: 16px;
+        resize: none;
+        transition: all 0.3s ease;
+        font-size: 0.95rem;
+    }
+    .feedback-textarea:focus {
+        background-color: #ffffff;
+        border-color: #e2e8f0;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        outline: none;
+    }
+
+    /* Submit Button Polish */
+    .btn-gradient-primary {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        color: white;
+        border: none;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .btn-gradient-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px -10px rgba(15, 23, 42, 0.5);
+        color: white;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container py-5">
     
@@ -13,7 +100,7 @@
             <p class="text-muted mb-0 mt-2">{{ today|date:"l, F jS, Y" }}</p>
         </div>
         
-        <div class="col-md-4 text-md-end">
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
              <div class="d-inline-flex bg-white border p-1 rounded-pill shadow-sm">
                 <button onclick="filterTimeline('all')" id="btn-all" class="btn btn-sm rounded-pill px-3 fw-bold bg-dark text-white shadow-sm transition-all filter-btn">
                     All
@@ -35,71 +122,75 @@
             <div class="d-flex flex-column gap-4" id="timelineContainer">
                 {% for item in timeline %}
                 <div class="card border-0 shadow-sm rounded-4 overflow-hidden position-relative transition-hover timeline-item" 
-                     data-status="{{ item.status }}">
+                     data-status="{{ item.status }}"
+                     id="card-{{ item.obj.id }}">
                     
-                    <div class="position-absolute top-0 bottom-0 start-0" style="width: 6px; 
-                        background-color: {% if item.status == 'Live Now' %}var(--success, #10b981){% elif item.status == 'Completed' %}#e2e8f0{% else %}var(--primary){% endif %};">
+                    <div id="strip-{{ item.obj.id }}" 
+                         class="position-absolute top-0 bottom-0 start-0 {% if item.status == 'Live Now' %}status-line-live{% elif item.status == 'Completed' %}status-line-completed{% else %}status-line-upcoming{% endif %}" 
+                         style="width: 6px;">
                     </div>
 
                     <div class="card-body p-4 ps-5">
                         <div class="row align-items-center">
                             
-                            <div class="col-md-3 border-end border-light">
-                                <h5 class="fw-bold mb-1 text-dark">{{ item.obj.slot }}</h5>
-                                {% if item.status == 'Live Now' %}
-                                    <span class="badge bg-success text-white rounded-pill animate-pulse px-3">
-                                        <i class="fas fa-circle fa-xs me-1"></i> Live
-                                    </span>
-                                {% elif item.status == 'Completed' %}
-                                    <span class="text-muted small fw-semibold">Completed</span>
-                                {% else %}
-                                    <span class="text-primary small fw-semibold">Upcoming</span>
-                                {% endif %}
+                            <div class="col-md-3 border-end border-light mb-3 mb-md-0">
+                                <h5 class="fw-bold mb-1 text-dark slot-time">{{ item.obj.slot }}</h5>
+                                <div id="badge-{{ item.obj.id }}" class="status-badge-container">
+                                    {% if item.status == 'Live Now' %}
+                                        <span class="badge bg-success text-white rounded-pill animate-pulse px-3 border border-success">
+                                            <i class="fas fa-circle fa-xs me-1"></i> Live
+                                        </span>
+                                    {% elif item.status == 'Completed' %}
+                                        <span class="text-muted small fw-semibold bg-light px-2 py-1 rounded">Completed</span>
+                                    {% else %}
+                                        <span class="text-primary small fw-semibold bg-light px-2 py-1 rounded">Upcoming</span>
+                                    {% endif %}
+                                </div>
                             </div>
 
-                            <div class="col-md-6 py-3 py-md-0 ps-md-4">
+                            <div class="col-md-6 ps-md-4">
                                 <h5 class="fw-bold text-dark mb-1">
                                     {% if item.obj.is_guest_lecture %}
                                         {{ item.obj.lecture_title }} 
                                         <span class="badge ms-2 text-uppercase fw-bold shadow-sm" 
-                                              style="background-color: var(--accent); color: white; font-size: 0.65rem;">
+                                              style="background-color: var(--accent, #f59e0b); color: white; font-size: 0.65rem;">
                                             Guest
                                         </span>
                                     {% else %}
                                         {{ item.obj.subject }}
                                     {% endif %}
                                 </h5>
-                                <div class="d-flex align-items-center text-muted small mt-2">
-                                    <div class="d-flex align-items-center me-3">
-                                        <div class="avatar-xs bg-light rounded-circle me-2 text-center" style="width:20px; height:20px; line-height:20px;">
-                                            <i class="fas fa-user fa-xs"></i>
+                                <div class="d-flex align-items-center text-muted small mt-2 gap-3">
+                                    <div class="d-flex align-items-center">
+                                        <div class="avatar-icon bg-light rounded-circle me-2 text-center text-secondary">
+                                            <i class="fas fa-user"></i>
                                         </div>
                                         {{ item.obj.faculty_name }}
                                     </div>
                                     <div class="d-flex align-items-center">
-                                        <div class="avatar-xs bg-light rounded-circle me-2 text-center" style="width:20px; height:20px; line-height:20px;">
-                                            <i class="fas fa-map-marker-alt fa-xs"></i>
+                                        <div class="avatar-icon bg-light rounded-circle me-2 text-center text-secondary">
+                                            <i class="fas fa-map-marker-alt"></i>
                                         </div>
                                         Room {{ item.obj.classroom.room_number }}
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="col-md-3 text-md-end mt-3 mt-md-0">
+                            <div class="col-md-3 text-md-end mt-3 mt-md-0" id="action-{{ item.obj.id }}">
                                 {% if item.has_feedback %}
                                     <button class="btn btn-light text-muted btn-sm rounded-pill px-3 border" disabled>
                                         <i class="fas fa-check-circle me-1 text-success"></i> Rated
                                     </button>
                                 {% elif item.can_feedback %}
                                     <button type="button" 
-                                            class="btn btn-dark btn-sm rounded-pill px-4 shadow-sm fw-bold"
+                                            class="btn btn-dark btn-sm rounded-pill px-4 shadow-sm fw-bold btn-rate"
                                             data-bs-toggle="modal" 
                                             data-bs-target="#feedbackModal"
-                                            onclick="setFeedbackUrl('{% url 'classroom:submit_feedback' item.obj.id %}', '{{ item.obj.subject|default:item.obj.lecture_title }}')">
+                                            onclick="setFeedbackUrl('{% url 'classroom:submit_feedback' item.obj.id %}', '{{ item.obj.subject|default:item.obj.lecture_title|escapejs }}')">
                                         Rate Class
                                     </button>
                                 {% else %}
-                                    <button class="btn btn-light text-muted btn-sm rounded-pill px-3 border" disabled>
+                                    <button class="btn btn-light text-muted btn-sm rounded-pill px-3 border btn-wait" disabled>
                                         Wait to Rate
                                     </button>
                                 {% endif %}
@@ -112,7 +203,7 @@
                     <div class="mb-3">
                         <span class="fa-stack fa-2x opacity-25 text-muted">
                             <i class="fas fa-circle fa-stack-2x"></i>
-                            <i class="fas fa-calendar-times fa-stack-1x fa-inverse"></i>
+                            <i class="fas fa-calendar-day fa-stack-1x fa-inverse"></i>
                         </span>
                     </div>
                     <h5 class="text-muted fw-normal">No lectures scheduled for today.</h5>
@@ -140,10 +231,12 @@
                         <div class="card h-100 border-0 shadow-sm rounded-4 bg-white transition-hover">
                             <div class="card-body p-4">
                                 <div class="d-flex justify-content-between mb-3">
-                                    <span class="badge bg-light text-dark border">{{ result.slot }}</span>
+                                    <span class="badge bg-light text-dark border">{{ result.booking_date|date:"M d" }} • {{ result.slot }}</span>
                                     <span class="fw-bold text-primary">R{{ result.classroom.room_number }}</span>
                                 </div>
-                                <h6 class="fw-bold mb-1 text-truncate">{{ result.subject|default:result.lecture_title }}</h6>
+                                <h6 class="fw-bold mb-1 text-truncate" title="{{ result.subject|default:result.lecture_title }}">
+                                    {{ result.subject|default:result.lecture_title }}
+                                </h6>
                                 <p class="small text-muted mb-0">
                                     <i class="fas fa-user-circle me-1"></i> {{ result.faculty_name }}
                                 </p>
@@ -168,7 +261,6 @@
         </div>
 
         <div class="col-lg-4">
-            
             <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
                 <div class="card-body p-4 text-center">
                     <div class="d-inline-flex align-items-center justify-content-center bg-primary text-white rounded-circle mb-3 shadow-sm" style="width: 72px; height: 72px; font-size: 1.75rem;">
@@ -178,8 +270,12 @@
                     <p class="text-muted small mb-3">{{ user.email }}</p>
                     
                     <div class="d-flex justify-content-center gap-2 flex-wrap">
-                        <span class="badge bg-light text-dark border fw-normal py-2 px-3 rounded-pill">{{ user.department }}</span>
-                        <span class="badge bg-light text-dark border fw-normal py-2 px-3 rounded-pill">{{ user.year }} - {{ user.division }}</span>
+                        {% if user.department %}
+                            <span class="badge bg-light text-dark border fw-normal py-2 px-3 rounded-pill">{{ user.department }}</span>
+                        {% endif %}
+                        {% if user.year and user.division %}
+                            <span class="badge bg-light text-dark border fw-normal py-2 px-3 rounded-pill">{{ user.year }} - {{ user.division }}</span>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -219,42 +315,48 @@
                     </form>
                 </div>
             </div>
-
         </div>
     </div>
 </div>
 
 <div class="modal fade" id="feedbackModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content rounded-4 border-0 shadow-lg">
-            <div class="modal-header border-0 pb-0 px-4 pt-4">
-                <h5 class="modal-title fw-bold" id="feedbackModalLabel">Rate Lecture</h5>
+        <div class="modal-content shadow-lg">
+            
+            <div class="modal-header border-0 pb-0 pt-4 px-4 justify-content-end">
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body p-4">
-                <p class="text-muted small mb-4">How was the session for <span id="modalSubjectName" class="fw-bold text-dark"></span>?</p>
+            
+            <div class="modal-body px-5 pb-5 pt-0 text-center">
+                <div class="mb-3">
+                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-light text-warning mb-2" style="width: 64px; height: 64px; background-color: #fffbeb;">
+                        <i class="fas fa-star fa-2x"></i>
+                    </div>
+                </div>
+
+                <h4 class="fw-bold text-dark mb-1">Rate the Session</h4>
+                <p class="text-muted mb-4">How was <span id="modalSubjectName" class="fw-bolder text-dark"></span>?</p>
                 
                 <form method="post" id="feedbackFormAction">
                     {% csrf_token %}
-                    <div class="mb-4">
-                        <label class="form-label fw-bold small text-uppercase text-muted">Rating</label>
-                        <div class="d-flex gap-3 justify-content-center py-3 bg-light rounded-3 border border-dashed">
-                            {% for i in "12345" %}
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="rating" id="rating{{forloop.counter}}" value="{{forloop.counter}}" required>
-                                <label class="form-check-label fw-bold" for="rating{{forloop.counter}}">{{forloop.counter}}</label>
-                            </div>
-                            {% endfor %}
-                        </div>
+                    
+                    <div class="star-rating-widget mb-4">
+                        <input type="radio" name="rating" id="star5" value="5" required><label for="star5" title="Amazing"><i class="fas fa-star"></i></label>
+                        <input type="radio" name="rating" id="star4" value="4"><label for="star4" title="Good"><i class="fas fa-star"></i></label>
+                        <input type="radio" name="rating" id="star3" value="3"><label for="star3" title="Average"><i class="fas fa-star"></i></label>
+                        <input type="radio" name="rating" id="star2" value="2"><label for="star2" title="Poor"><i class="fas fa-star"></i></label>
+                        <input type="radio" name="rating" id="star1" value="1"><label for="star1" title="Terrible"><i class="fas fa-star"></i></label>
                     </div>
                     
-                    <div class="mb-4">
-                        <label class="form-label fw-bold small text-uppercase text-muted">Comments (Optional)</label>
-                        <textarea name="comments" class="form-control bg-light border-0" rows="3" placeholder="Share your thoughts..."></textarea>
+                    <div class="mb-4 text-start">
+                        <label class="form-label small text-uppercase fw-bold text-muted ps-2" style="font-size: 0.75rem; letter-spacing: 1px;">Your Thoughts (Optional)</label>
+                        <textarea name="comments" class="form-control feedback-textarea p-3" rows="3" placeholder="What did you learn? Was it helpful?"></textarea>
                     </div>
 
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-primary rounded-pill fw-bold py-2">Submit Feedback</button>
+                        <button type="submit" class="btn btn-gradient-primary rounded-pill py-3 fw-bold shadow-sm">
+                            Submit Review
+                        </button>
                     </div>
                 </form>
             </div>
@@ -262,23 +364,70 @@
     </div>
 </div>
 
-<style>
-    @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-        70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-    }
-    .animate-pulse { animation: pulse 2s infinite; }
-    .transition-hover:hover { transform: translateY(-3px); transition: transform 0.2s ease; }
-    .transition-all { transition: all 0.3s ease; }
-    .avatar-xs { font-size: 0.7rem; color: #64748b; }
-</style>
-
 <script>
     function setFeedbackUrl(url, subjectName) {
         document.getElementById('feedbackFormAction').action = url;
         document.getElementById('modalSubjectName').innerText = subjectName;
     }
+
+    // --- AUTOMATIC STATUS CORRECTION (24hr Clock Fix) ---
+    document.addEventListener('DOMContentLoaded', () => {
+        const cards = document.querySelectorAll('.timeline-item');
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+        cards.forEach(card => {
+            // 1. Get and Parse Time Slot
+            const slotText = card.querySelector('.slot-time').innerText.trim(); // "3:10 - 4:40"
+            const [startStr, endStr] = slotText.split('-').map(s => s.trim());
+
+            // Helper to parse 12h time to minutes (assumes 1:00-6:00 is PM)
+            const parseTime = (str) => {
+                let [h, m] = str.split(':').map(Number);
+                if (h >= 1 && h <= 6) h += 12; // Convert 1-6 to 13-18 (24hr)
+                return h * 60 + m;
+            };
+
+            const startMin = parseTime(startStr);
+            const endMin = parseTime(endStr);
+
+            // 2. Determine Correct Status
+            let correctStatus = 'Upcoming';
+            if (currentMinutes > endMin) correctStatus = 'Completed';
+            else if (currentMinutes >= startMin) correctStatus = 'Live Now';
+
+            // 3. Update DOM if different
+            card.setAttribute('data-status', correctStatus);
+            
+            // Update Strip Color & Badge
+            const strip = card.querySelector('[id^="strip-"]');
+            const badgeContainer = card.querySelector('.status-badge-container');
+            
+            // Reset Classes
+            if(strip) strip.classList.remove('status-line-live', 'status-line-upcoming', 'status-line-completed');
+            
+            let badgeHtml = '';
+            if (correctStatus === 'Live Now') {
+                if(strip) strip.classList.add('status-line-live');
+                badgeHtml = `<span class="badge bg-success text-white rounded-pill animate-pulse px-3 border border-success"><i class="fas fa-circle fa-xs me-1"></i> Live</span>`;
+            } else if (correctStatus === 'Completed') {
+                if(strip) strip.classList.add('status-line-completed');
+                badgeHtml = `<span class="text-muted small fw-semibold bg-light px-2 py-1 rounded">Completed</span>`;
+            } else {
+                if(strip) strip.classList.add('status-line-upcoming');
+                badgeHtml = `<span class="text-primary small fw-semibold bg-light px-2 py-1 rounded">Upcoming</span>`;
+            }
+            if(badgeContainer) badgeContainer.innerHTML = badgeHtml;
+        });
+        
+        // Re-run filter to apply new statuses
+        const activeBtn = document.querySelector('.filter-btn.bg-dark');
+        if(activeBtn) {
+            if(activeBtn.innerText.includes('Live')) filterTimeline('Live Now');
+            else if(activeBtn.innerText.includes('Upcoming')) filterTimeline('Upcoming');
+            else filterTimeline('all');
+        }
+    });
 
     // --- TIMELINE FILTER LOGIC ---
     function filterTimeline(filterType) {
@@ -288,12 +437,16 @@
 
         // 1. Update Button Styles
         btns.forEach(btn => {
-            btn.classList.remove('bg-dark', 'text-white', 'shadow-sm'); // Remove active style
-            btn.classList.add('text-muted'); // Add inactive style
+            btn.classList.remove('bg-dark', 'text-white', 'shadow-sm');
+            btn.classList.add('text-muted');
         });
 
-        // Set Active Button
-        const activeBtn = document.getElementById('btn-' + filterType.toLowerCase().split(' ')[0]);
+        // Set Active Button Logic
+        let activeBtnId = 'btn-all';
+        if (filterType === 'Live Now') activeBtnId = 'btn-live';
+        if (filterType === 'Upcoming') activeBtnId = 'btn-upcoming';
+        
+        const activeBtn = document.getElementById(activeBtnId);
         if(activeBtn) {
             activeBtn.classList.remove('text-muted');
             activeBtn.classList.add('bg-dark', 'text-white', 'shadow-sm');
@@ -302,7 +455,17 @@
         // 2. Filter Items
         items.forEach(item => {
             const status = item.getAttribute('data-status');
-            if (filterType === 'all' || status === filterType) {
+            let show = false;
+            
+            if (filterType === 'all') {
+                show = true;
+            } else if (status === filterType) {
+                show = true;
+            } else if (filterType === 'Upcoming' && status === 'Scheduled') {
+                show = true;
+            }
+
+            if (show) {
                 item.style.display = 'block';
                 visibleCount++;
             } else {
@@ -312,7 +475,7 @@
 
         // 3. Show "No Results" message if empty
         const noRes = document.getElementById('no-filter-results');
-        if (visibleCount === 0) {
+        if (visibleCount === 0 && items.length > 0) {
             noRes.style.display = 'block';
         } else {
             noRes.style.display = 'none';

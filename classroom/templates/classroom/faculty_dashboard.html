@@ -95,7 +95,8 @@
                                         <div class="slot-card {% if booking.is_guest_lecture %}guest{% else %}regular{% endif %} transition-hover">
                                             
                                             {% if booking.faculty == user %}
-                                                {% if not booking.is_past_or_ongoing %}
+                                                {# Case 1: My Booking - Check calculated Cancellable Status #}
+                                                {% if booking.is_cancellable %}
                                                     <a href="{% url 'classroom:cancel_booking' booking.id %}" 
                                                        class="position-absolute top-0 end-0 m-2 btn btn-sm bg-white text-danger shadow-sm rounded-circle d-flex align-items-center justify-content-center"
                                                        style="width: 24px; height: 24px; z-index: 10;" 
@@ -108,6 +109,11 @@
                                                         <i class="fas fa-lock fa-xs"></i>
                                                     </div>
                                                 {% endif %}
+                                            {% else %}
+                                                {# Case 2: Someone else's booking - Always Locked #}
+                                                <div class="position-absolute top-0 end-0 m-2 text-secondary opacity-25" title="Booked by {{ booking.faculty_name }}">
+                                                    <i class="fas fa-lock fa-xs"></i>
+                                                </div>
                                             {% endif %}
                                             
                                             <span class="d-block small fw-bold text-uppercase text-muted mb-1" style="font-size: 0.65rem;">
