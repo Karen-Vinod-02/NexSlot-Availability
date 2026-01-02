@@ -147,16 +147,22 @@ class Document(models.Model):
     """
     Stores uploaded files for RAG processing (Chatbot knowledge base).
     """
-    file = models.FileField(upload_to='data/')  # Saves to /media/data/ or project_root/data/
+    title = models.CharField(max_length=255, blank=True)
+    file = models.FileField(upload_to='data/')  # Saves to project_root/data/
     uploaded_at = models.DateTimeField(auto_now_add=True)
     processed = models.BooleanField(default=False)
+    
+    # Metadata for Intelligent Indexing
+    department = models.CharField(max_length=255, blank=True, null=True)
+    year = models.CharField(max_length=50, blank=True, null=True)
+    semester = models.CharField(max_length=50, blank=True, null=True)
     
     class Meta:
         db_table = 'documents'
         ordering = ['-uploaded_at']
 
     def __str__(self):
-        return self.file.name
+        return self.title or self.file.name
 
 class SystemConfig(models.Model):
     # Functional Config

@@ -31,5 +31,6 @@ urlpatterns = [
 
     # Chatbot
     path('api/chat/', views.chat_api, name='chat_api'),
+    path('faculty/upload/', views.upload_document, name='upload_document'),
     path('api/download/<str:filename>/', views.download_pdf, name='download_pdf'),
 ]

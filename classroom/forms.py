@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
-from .models import User, Classroom, Booking, Feedback, SystemConfig, AuthorizedEmail
+from .models import User, Classroom, Booking, Feedback, SystemConfig, AuthorizedEmail, Document
 
 # --- COLLEGE CONSTANTS ---
 DEPT_CHOICES = [
@@ -130,7 +130,6 @@ class BookingForm(forms.ModelForm):
             self.fields['year'].label = "Level"
             
             # Disable academic fields so they don't block validation visually
-            # (Note: Logic in views.py handles the actual data cleaning)
             self.fields['semester'].widget.attrs['disabled'] = True
             self.fields['division'].widget.attrs['disabled'] = True
             
@@ -204,3 +203,25 @@ class SystemBrandingForm(forms.ModelForm):
         if not self.user or not self.user.check_password(password):
             raise forms.ValidationError("Incorrect password.")
         return password
+
+class DocumentUploadForm(forms.ModelForm):
+    department = forms.ChoiceField(choices=[('', 'General / All')] + DEPT_CHOICES, required=False, widget=forms.Select(attrs={'class': 'form-select'}))
+    year = forms.ChoiceField(choices=[('', 'General / All')] + YEAR_CHOICES, required=False, widget=forms.Select(attrs={'class': 'form-select'}))
+    semester = forms.ChoiceField(choices=[('', 'General / All')] + SEM_CHOICES, required=False, widget=forms.Select(attrs={'class': 'form-select'}))
+
+    class Meta:
+        model = Document
+        fields = ['file', 'title', 'department', 'year', 'semester']
+        widgets = {
+            'file': forms.FileInput(attrs={'class': 'form-control', 'accept': '.pdf,.txt'}),
+            'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Syllabus 2026'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        config = SystemConfig.get_config()
+        if config.org_type == 'Corporate':
+            self.fields['department'].choices = [('', 'General / All')] + CORP_DEPT_CHOICES
+            self.fields['year'].choices = [('', 'General / All')] + CORP_LEVEL_CHOICES
+            self.fields['year'].label = "Level"
+            self.fields['semester'].widget = forms.HiddenInput() # Hide semester for corporate

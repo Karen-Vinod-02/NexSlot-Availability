@@ -27,8 +27,6 @@
         min-height: 120px;
     }
     .slot-card.regular { border-left: 4px solid var(--primary); }
-    
-    /* UPDATED: Uses Dynamic Accent Color for Guest Slots */
     .slot-card.guest { border-left: 4px solid var(--accent, #f59e0b); background: #fffbeb; }
     
     .clean-table th { font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; color: #64748b; font-weight: 700; padding: 1.5rem 1rem; white-space: nowrap; }
@@ -44,6 +42,29 @@
     /* Filter Inputs */
     .filter-input { font-size: 0.85rem; padding: 0.5rem; background: #f8fafc; border: 1px solid #e2e8f0; }
     .filter-input:focus { background: white; border-color: var(--primary); box-shadow: none; }
+
+    /* Upload Button Polish */
+    .btn-upload {
+        background-color: #fff; border: 1px solid #e2e8f0; color: #64748b;
+        font-weight: 600; font-size: 0.85rem; transition: all 0.2s;
+    }
+    .btn-upload:hover { border-color: var(--primary); color: var(--primary); background-color: #f8fafc; }
+    
+    /* Upload Zone */
+    .upload-zone {
+        border: 2px dashed #cbd5e1;
+        border-radius: 12px;
+        padding: 30px;
+        text-align: center;
+        background-color: #f8fafc;
+        transition: all 0.2s;
+        cursor: pointer;
+        position: relative;
+    }
+    .upload-zone:hover { border-color: var(--primary); background-color: #eff6ff; }
+    .upload-zone input[type="file"] {
+        position: absolute; width: 100%; height: 100%; top: 0; left: 0; opacity: 0; cursor: pointer;
+    }
 </style>
 {% endblock %}
 
@@ -56,14 +77,19 @@
             <p class="text-muted mb-0">Here is the schedule <span class="fw-bold text-dark">{{ selected_date|date:"l, F jS" }}</span></p>
         </div>
         
-        <form method="get" class="bg-white border p-1 rounded-pill shadow-sm d-flex align-items-center ps-3">
-            <i class="far fa-calendar text-muted me-2"></i>
-            <input type="date" name="date" value="{{ selected_date }}" onchange="this.form.submit()" class="border-0 bg-transparent fw-bold text-dark" style="outline: none;">
-        </form>
+        <div class="d-flex align-items-center gap-3">
+            <button class="btn btn-upload rounded-pill px-3 py-2 shadow-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                <i class="fas fa-cloud-upload-alt me-2"></i> Add Knowledge
+            </button>
+
+            <form method="get" class="bg-white border p-1 rounded-pill shadow-sm d-flex align-items-center ps-3">
+                <i class="far fa-calendar text-muted me-2"></i>
+                <input type="date" name="date" value="{{ selected_date }}" onchange="this.form.submit()" class="border-0 bg-transparent fw-bold text-dark" style="outline: none;">
+            </form>
+        </div>
     </div>
 
     <div class="row g-4">
-        
         <div class="col-lg-12 col-xl-9">
             <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
                 <div class="table-responsive">
@@ -95,36 +121,23 @@
                                 <td>
                                     {% if booking %}
                                         <div class="slot-card {% if booking.is_guest_lecture %}guest{% else %}regular{% endif %} transition-hover">
-                                            
                                             {% if booking.faculty == user %}
-                                                {# Case 1: My Booking - Check calculated Cancellable Status #}
                                                 {% if booking.is_cancellable %}
                                                     <a href="{% url 'classroom:cancel_booking' booking.id %}" 
                                                        class="position-absolute top-0 end-0 m-2 btn btn-sm bg-white text-danger shadow-sm rounded-circle d-flex align-items-center justify-content-center"
                                                        style="width: 24px; height: 24px; z-index: 10;" 
-                                                       onclick="return confirm('Cancel this booking?')"
-                                                       title="Cancel Booking">
+                                                       onclick="return confirm('Cancel this booking?')" title="Cancel Booking">
                                                         <i class="fas fa-times fa-xs"></i>
                                                     </a>
                                                 {% else %}
-                                                    <div class="position-absolute top-0 end-0 m-2 text-muted opacity-50" title="Cannot cancel past lecture">
-                                                        <i class="fas fa-lock fa-xs"></i>
-                                                    </div>
+                                                    <div class="position-absolute top-0 end-0 m-2 text-muted opacity-50" title="Cannot cancel past lecture"><i class="fas fa-lock fa-xs"></i></div>
                                                 {% endif %}
                                             {% else %}
-                                                {# Case 2: Someone else's booking - Always Locked #}
-                                                <div class="position-absolute top-0 end-0 m-2 text-secondary opacity-25" title="Booked by {{ booking.faculty_name }}">
-                                                    <i class="fas fa-lock fa-xs"></i>
-                                                </div>
+                                                <div class="position-absolute top-0 end-0 m-2 text-secondary opacity-25" title="Booked by {{ booking.faculty_name }}"><i class="fas fa-lock fa-xs"></i></div>
                                             {% endif %}
                                             
-                                            <span class="d-block small fw-bold text-uppercase text-muted mb-1" style="font-size: 0.65rem;">
-                                                {{ booking.department|default:"General" }}
-                                            </span>
-                                            
-                                            <div class="fw-bold text-dark lh-sm text-truncate mb-1" title="{{ booking.subject|default:booking.lecture_title }}">
-                                                {{ booking.subject|default:booking.lecture_title }}
-                                            </div>
+                                            <span class="d-block small fw-bold text-uppercase text-muted mb-1" style="font-size: 0.65rem;">{{ booking.department|default:"General" }}</span>
+                                            <div class="fw-bold text-dark lh-sm text-truncate mb-1" title="{{ booking.subject|default:booking.lecture_title }}">{{ booking.subject|default:booking.lecture_title }}</div>
                                             
                                             {% if booking.is_guest_lecture and booking.guest_speaker %}
                                                 <div class="small text-dark mb-1 d-flex align-items-center">
@@ -141,10 +154,7 @@
                                         </div>
                                     {% else %}
                                         <div class="slot-free" onclick="openBookingModal('{{ row.classroom.id }}', '{{ row.classroom.room_number }}', '{{ slot }}')">
-                                            <div class="text-center">
-                                                <i class="fas fa-plus mb-1"></i>
-                                                <div class="small fw-bold" style="font-size: 0.7rem;">BOOK</div>
-                                            </div>
+                                            <div class="text-center"><i class="fas fa-plus mb-1"></i><div class="small fw-bold" style="font-size: 0.7rem;">BOOK</div></div>
                                         </div>
                                     {% endif %}
                                 </td>
@@ -159,30 +169,18 @@
 
         <div class="col-lg-12 col-xl-3">
             <div class="sticky-top" style="top: 2rem;">
-                
                 <div class="card border-0 shadow-sm rounded-4 p-4 mb-4 bg-white">
                     <h6 class="fw-bold text-dark mb-3">Filter History</h6>
                     <div class="row g-2">
-                        <div class="col-12">
-                            <input type="text" id="filterSubject" class="form-control filter-input rounded-3" placeholder="Search {% if config.org_type == 'Corporate' %}Topic{% else %}Subject{% endif %}...">
-                        </div>
-                        <div class="col-6">
-                            <input type="text" id="filterDept" class="form-control filter-input rounded-3" placeholder="Dept">
-                        </div>
-                        <div class="col-6">
-                            <input type="text" id="filterYear" class="form-control filter-input rounded-3" placeholder="{% if config.org_type == 'Corporate' %}Level{% else %}Year{% endif %}">
-                        </div>
-                        <div class="col-6">
-                            <input type="text" id="filterRoom" class="form-control filter-input rounded-3" placeholder="{% if config.org_type == 'Corporate' %}Space{% else %}Room{% endif %}">
-                        </div>
-                        <div class="col-6">
-                            <input type="date" id="filterDate" class="form-control filter-input rounded-3">
-                        </div>
+                        <div class="col-12"><input type="text" id="filterSubject" class="form-control filter-input rounded-3" placeholder="Search {% if config.org_type == 'Corporate' %}Topic{% else %}Subject{% endif %}..."></div>
+                        <div class="col-6"><input type="text" id="filterDept" class="form-control filter-input rounded-3" placeholder="Dept"></div>
+                        <div class="col-6"><input type="text" id="filterYear" class="form-control filter-input rounded-3" placeholder="{% if config.org_type == 'Corporate' %}Level{% else %}Year{% endif %}"></div>
+                        <div class="col-6"><input type="text" id="filterRoom" class="form-control filter-input rounded-3" placeholder="{% if config.org_type == 'Corporate' %}Space{% else %}Room{% endif %}"></div>
+                        <div class="col-6"><input type="date" id="filterDate" class="form-control filter-input rounded-3"></div>
                     </div>
                 </div>
 
                 <h6 class="fw-bold text-muted text-uppercase small letter-spacing-1 mb-3">Your Bookings</h6>
-                
                 <div class="d-flex flex-column gap-3" id="bookingHistoryList" style="max-height: 600px; overflow-y: auto;">
                     {% for b in my_bookings %}
                     <div class="card border-0 shadow-sm rounded-4 p-3 bg-white history-item"
@@ -191,15 +189,11 @@
                          data-year="{{ b.year|default:''|lower }}"
                          data-room="{{ b.classroom.room_number|lower }}"
                          data-date="{{ b.booking_date|date:'Y-m-d' }}">
-                        
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <span class="badge bg-light text-dark border">{{ b.booking_date|date:"M d, Y" }}</span>
                             {% if b.status == 'Confirmed' %}
-                                {% if b.is_past_or_ongoing %}
-                                    <i class="fas fa-history text-muted small" title="Completed"></i>
-                                {% else %}
-                                    <i class="fas fa-check-circle text-success small" title="Upcoming"></i>
-                                {% endif %}
+                                {% if b.is_past_or_ongoing %}<i class="fas fa-history text-muted small" title="Completed"></i>
+                                {% else %}<i class="fas fa-check-circle text-success small" title="Upcoming"></i>{% endif %}
                             {% endif %}
                         </div>
                         <h6 class="fw-bold text-dark mb-1">{{ b.subject|default:b.lecture_title }}</h6>
@@ -207,9 +201,7 @@
                             <span>{{ b.slot }}</span>
                             <span>{% if config.org_type == 'Corporate' %}Space{% else %}Room{% endif %} {{ b.classroom.room_number }}</span>
                         </div>
-                        <div class="small text-muted mt-1">
-                            {{ b.department|default:"-" }} • {{ b.year|default:"-" }}
-                        </div>
+                        <div class="small text-muted mt-1">{{ b.department|default:"-" }} • {{ b.year|default:"-" }}</div>
                     </div>
                     {% empty %}
                         <p class="text-muted small">No booking history found.</p>
@@ -217,7 +209,6 @@
                 </div>
             </div>
         </div>
-
     </div>
 </div>
 
@@ -262,13 +253,10 @@
                         <div class="row g-3">
                             <div class="col-6">{{ form.department|as_crispy_field }}</div>
                             <div class="col-6">{{ form.year|as_crispy_field }}</div>
-                            
-                            {# Hide Semester/Division for Corporate #}
                             {% if config.org_type != 'Corporate' %}
                                 <div class="col-6">{{ form.semester|as_crispy_field }}</div>
                                 <div class="col-6">{{ form.division|as_crispy_field }}</div>
                             {% endif %}
-                            
                             <div class="col-12">{{ form.subject|as_crispy_field }}</div>
                         </div>
                     </div>
@@ -277,42 +265,20 @@
                         <div class="row g-3">
                             <div class="col-12">{{ form.lecture_title|as_crispy_field }}</div>
                             <div class="col-12">{{ form.guest_speaker|as_crispy_field }}</div>
-                            
                             <hr class="text-muted my-2">
-                            <p class="text-muted small mb-0 fw-bold">{% if config.org_type == 'Corporate' %}Target Attendees{% else %}Target Audience{% endif %} (Optional)</p>
-                            
+                            <p class="text-muted small mb-0 fw-bold">Target Audience (Optional)</p>
                             <div class="col-6">
                                 <select name="guest_department" class="form-select bg-light border-0">
                                     <option value="">All Depts</option>
-                                    {% if config.org_type == 'Corporate' %}
-                                        <option value="Engineering">Engineering</option>
-                                        <option value="Marketing">Marketing</option>
-                                        <option value="Sales">Sales</option>
-                                        <option value="HR">HR</option>
-                                        <option value="Finance">Finance</option>
-                                    {% else %}
-                                        <option value="Computer Engineering">Computer</option>
-                                        <option value="Mechanical Engineering">Mechanical</option>
-                                        <option value="Civil Engineering">Civil</option>
-                                        <option value="Electronics & Telecom (EXTC)">EXTC</option>
-                                        <option value="Chemical Engineering">Chemical</option>
-                                    {% endif %}
+                                    <option value="Computer Engineering">Computer</option>
+                                    <option value="Mechanical Engineering">Mechanical</option>
                                 </select>
                             </div>
                             <div class="col-6">
                                 <select name="guest_year" class="form-select bg-light border-0">
-                                    <option value="">{% if config.org_type == 'Corporate' %}All Levels{% else %}All Years{% endif %}</option>
-                                    {% if config.org_type == 'Corporate' %}
-                                        <option value="Junior">Junior</option>
-                                        <option value="Mid-Level">Mid-Level</option>
-                                        <option value="Senior">Senior</option>
-                                        <option value="Executive">Executive</option>
-                                    {% else %}
-                                        <option value="FE">FE</option>
-                                        <option value="SE">SE</option>
-                                        <option value="TE">TE</option>
-                                        <option value="BE">BE</option>
-                                    {% endif %}
+                                    <option value="">All Years</option>
+                                    <option value="FE">FE</option>
+                                    <option value="SE">SE</option>
                                 </select>
                             </div>
                         </div>
@@ -320,6 +286,77 @@
 
                     <div class="d-grid mt-4">
                         <button type="submit" class="btn btn-dark rounded-pill fw-bold py-2">Confirm Booking</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0 rounded-4">
+            <div class="modal-header border-0 pb-0 px-4 pt-4">
+                <h5 class="modal-title fw-bold">Upload to AI Knowledge Base</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form method="post" action="{% url 'classroom:upload_document' %}" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted text-uppercase">Document Title</label>
+                        <input type="text" name="title" class="form-control" placeholder="e.g. Data Structures Syllabus" required>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-muted">Target Context</label>
+                        </div>
+                        <div class="col-4">
+                            <select name="department" class="form-select bg-light border-0 text-muted small">
+                                <option value="">Dept (General)</option>
+                                <option value="Computer Engineering">Computer</option>
+                                <option value="Electronics & Telecom (EXTC)">EXTC</option>
+                                <option value="Mechanical Engineering">Mechanical</option>
+                                <option value="Civil Engineering">Civil</option>
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <select name="year" class="form-select bg-light border-0 text-muted small">
+                                <option value="">Year (General)</option>
+                                <option value="FE">FE</option>
+                                <option value="SE">SE</option>
+                                <option value="TE">TE</option>
+                                <option value="BE">BE</option>
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <select name="semester" class="form-select bg-light border-0 text-muted small">
+                                <option value="">Sem (General)</option>
+                                <option value="Sem 4">Sem 4</option>
+                                <option value="Sem 5">Sem 5</option>
+                            </select>
+                        </div>
+                        <div class="col-12 mt-1">
+                            <small class="text-muted extra-small">
+                                <i class="fas fa-info-circle me-1"></i> 
+                                Tags help the AI find this document faster.
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="upload-zone mb-3">
+                        <i class="fas fa-file-pdf fa-2x text-muted mb-2"></i>
+                        <div class="small fw-bold text-dark">Click or Drop PDF here</div>
+                        <div class="text-muted extra-small">Max 10MB</div>
+                        <input type="file" name="file" accept=".pdf,.txt" required>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary rounded-pill fw-bold py-2">
+                            <i class="fas fa-robot me-2"></i> Ingest Document
+                        </button>
                     </div>
                 </form>
             </div>
@@ -368,17 +405,13 @@
         const url = document.getElementById('bookingForm').dataset.subjectsUrl;
 
         function loadSubjects() {
-            // STOP AJAX IF CORPORATE (Subject is text input)
             if (orgType === 'Corporate') return;
-
             if(dept.value && year.value) {
-                // If College mode, we might need semester.
                 if (sem && !sem.value && orgType === 'College') {
                      subj.innerHTML = '<option value="">Select Semester first</option>';
                      subj.disabled = true;
                      return;
                 }
-
                 subj.innerHTML = '<option>Loading...</option>';
                 subj.disabled = true;
                 

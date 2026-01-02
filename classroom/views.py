@@ -11,8 +11,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.utils import timezone
 from datetime import date, datetime
-from .models import User, Classroom, Booking, Feedback, SystemConfig, Subject, AuthorizedEmail
-from .forms import UserRegistrationForm, UserLoginForm, ClassroomForm, BookingForm, FeedbackForm, SystemBrandingForm, get_allowed_divisions, get_allowed_semesters
+from .models import User, Classroom, Booking, Feedback, SystemConfig, Subject, AuthorizedEmail, Document
+from .forms import UserRegistrationForm, UserLoginForm, ClassroomForm, BookingForm, FeedbackForm, SystemBrandingForm, DocumentUploadForm, get_allowed_divisions, get_allowed_semesters
 
 # ---------------------------------------------------------
 # AI CHATBOT CONFIGURATION & GLOBALS
@@ -21,10 +21,12 @@ try:
     from langchain_chroma import Chroma
     from langchain_ollama import OllamaLLM, OllamaEmbeddings
     from langchain_core.prompts import PromptTemplate
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+    from langchain_community.document_loaders import PyPDFLoader, TextLoader
     AI_AVAILABLE = True
 except ImportError:
     AI_AVAILABLE = False
-    print("⚠️ AI Libraries (langchain-chroma, langchain-ollama) not found. Chatbot will be offline.")
+    print("⚠️ AI Libraries not found. Chatbot will be offline.")
 
 # Global Caches
 chat_sessions = {}  
@@ -81,10 +83,13 @@ def load_system(portal_name):
     }
     
     db_path = db_map.get(portal_name)
+    # Default fallback if specific DB doesn't exist yet
     if not db_path or not os.path.exists(db_path):
-        print(f"❌ DB Path not found or invalid: {db_path}")
-        return None, None
+        db_path = os.path.join(base_dir, "chroma_db_general")
     
+    if not os.path.exists(db_path):
+         return None, None # No DB at all
+
     vectorstore = Chroma(
         persist_directory=db_path,
         embedding_function=embeddings
@@ -127,6 +132,64 @@ def preprocess_question(question):
 def post_process_answer(answer):
     return answer.strip()
 
+def ingest_document(doc_instance):
+    """
+    Process uploaded PDF/TXT and add to the correct ChromaDB vector store.
+    """
+    if not AI_AVAILABLE: return False
+
+    try:
+        file_path = doc_instance.file.path
+        ext = os.path.splitext(file_path)[1].lower()
+        
+        # 1. Load Document
+        if ext == '.pdf':
+            loader = PyPDFLoader(file_path)
+        elif ext == '.txt':
+            loader = TextLoader(file_path)
+        else:
+            return False # Unsupported format
+            
+        docs = loader.load()
+        
+        # 2. Add Metadata
+        for d in docs:
+            d.metadata['source'] = doc_instance.file.name
+            d.metadata['title'] = doc_instance.title
+            if doc_instance.department: d.metadata['department'] = doc_instance.department
+        
+        # 3. Split Text
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        chunks = splitter.split_documents(docs)
+        
+        # 4. Determine Target DB based on metadata
+        # Logic: If semester is "Sem 4", go to sem4 db. If "Sem 5", go to sem5. Else General.
+        target_db_folder = "chroma_db_general"
+        portal_key = "About VESIT"
+        
+        if doc_instance.semester == "Sem 4":
+            target_db_folder = "chroma_db_sem4"
+            portal_key = "Semester 4"
+        elif doc_instance.semester == "Sem 5":
+            target_db_folder = "chroma_db_sem5"
+            portal_key = "Semester 5"
+            
+        db_path = os.path.join(settings.BASE_DIR, target_db_folder)
+        
+        # 5. Ingest into Chroma
+        embeddings = get_embeddings()
+        vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
+        vectorstore.add_documents(chunks)
+        
+        # 6. Invalidate Cache so new data is used immediately
+        if portal_key in llm_cache:
+            del llm_cache[portal_key]
+            
+        return True
+    except Exception as e:
+        print(f"Ingestion Error: {e}")
+        return False
+
 # -------------------------
 # AUTHENTICATION
 # -------------------------
@@ -151,7 +214,6 @@ def user_login(request):
     else:
         form = UserLoginForm()
     
-    # Pass 'branding' context so base.html updates UI colors
     return render(request, 'classroom/login.html', {'form': form, 'config': config, 'branding': config})
 
 def forgot_password(request):
@@ -270,7 +332,7 @@ def student_dashboard(request):
         'feedback_form': FeedbackForm(), 
         'user': request.user, 
         'config': config,
-        'branding': config # Pass branding for UI updates
+        'branding': config 
     }
     return render(request, 'classroom/student_dashboard.html', context)
 
@@ -299,7 +361,7 @@ def faculty_dashboard(request):
     context = {
         'availability_data': availability_data, 
         'config': config, 
-        'branding': config, # Pass branding for UI updates
+        'branding': config, 
         'selected_date': selected_date_str, 
         'my_bookings': my_bookings, 
         'form': BookingForm(initial={'booking_date': selected_date})
@@ -349,7 +411,7 @@ def admin_dashboard(request):
         'classrooms': Classroom.objects.all(),
         'all_bookings': all_bookings,
         'config': config,
-        'branding': config, # Pass branding for UI updates
+        'branding': config,
         'branding_form': branding_form,
         'avg_rating': avg_rating,
         'guest_avg': guest_avg,
@@ -371,8 +433,6 @@ def create_booking(request):
         config = SystemConfig.get_config()
         
         # --- FIX: Handle Corporate Mode Hidden Fields ---
-        # When in Corporate mode, Semester/Division are hidden in HTML.
-        # We inject dummy values into a copy of request.POST to pass validation.
         data = request.POST.copy()
         if config.org_type == 'Corporate':
             data['semester'] = '1'  # Dummy value
@@ -392,7 +452,6 @@ def create_booking(request):
             else:
                 raw_subject = form.cleaned_data.get('subject')
                 if config.org_type == 'Corporate':
-                    # Clean up the dummy values
                     booking.semester = None
                     booking.division = None
                     booking.subject = raw_subject
@@ -457,6 +516,32 @@ def view_availability(request):
     config = SystemConfig.get_config()
     availability_data = [{'classroom': c, 'slots': {s: Booking.objects.filter(classroom=c, booking_date=selected_date, slot=s).first() for s in config.class_slots}} for c in Classroom.objects.all()]
     return render(request, 'classroom/view_availability.html', {'availability_data': availability_data, 'selected_date': selected_date, 'config': config, 'branding': config})
+
+@login_required
+def upload_document(request):
+    """Handle document uploads and trigger AI ingestion"""
+    if request.user.role != 'Faculty': return redirect('classroom:dashboard')
+    
+    if request.method == 'POST':
+        form = DocumentUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            doc = form.save()
+            
+            # Trigger Ingestion
+            success = ingest_document(doc)
+            
+            if success:
+                doc.processed = True
+                doc.save()
+                messages.success(request, f"Successfully uploaded and indexed '{doc.title or doc.file.name}'.")
+            else:
+                messages.warning(request, f"File uploaded, but AI indexing failed. It will be retried later.")
+                
+            return redirect('classroom:faculty_dashboard')
+        else:
+            messages.error(request, "Upload failed. Please check the form.")
+            
+    return redirect('classroom:faculty_dashboard')
 
 # -------------------------
 # AJAX
@@ -539,7 +624,7 @@ def chat_api(request):
             if any(x in answer.lower() for x in no_info_phrases):
                 sources = []
 
-        # Store History (In-memory for now, could be DB model)
+        # Store History (In-memory for now)
         session_key = f"{session_id}_{portal_name}"
         if session_key not in chat_sessions:
             chat_sessions[session_key] = []
@@ -584,19 +669,3 @@ def download_pdf(request, filename):
     if os.path.exists(file_path):
         return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=filename)
     raise Http404("File not found")
-
-@login_required
-def upload_document(request):
-    """Handle document uploads for RAG"""
-    if request.method == 'POST' and request.FILES.get('document'):
-        f = request.FILES['document']
-        # Ensure 'data' directory exists
-        path = os.path.join(settings.BASE_DIR, 'data')
-        os.makedirs(path, exist_ok=True)
-        
-        # Save file
-        with open(os.path.join(path, f.name), 'wb+') as dest:
-            for chunk in f.chunks(): dest.write(chunk)
-            
-        messages.success(request, f"Uploaded {f.name}. The AI will index it shortly.")
-    return redirect('classroom:faculty_dashboard')
