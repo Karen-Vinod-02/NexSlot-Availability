@@ -13,14 +13,12 @@
     <style>
         :root {
             /* --- DYNAMIC THEME ENGINE --- */
-            /* Injected via context_processors.py */
             --primary: {{ branding.primary_color|default:"#2563EB" }};
-            /* Added Accent Color Variable */
             --accent: {{ branding.accent_color|default:"#F59E0B" }}; 
             --bg-body: {{ branding.secondary_color|default:"#F3F4F6" }};
             
             /* Calculated variants */
-            --primary-soft: {{ branding.primary_color|default:"#2563EB" }}15; /* 15 = hex opacity */
+            --primary-soft: {{ branding.primary_color|default:"#2563EB" }}15; 
             --font-main: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             --text-main: #111827;
         }
@@ -30,13 +28,12 @@
             background-color: var(--bg-body);
             color: var(--text-main);
             -webkit-font-smoothing: antialiased;
+            padding-top: 80px;
         }
 
-        /* --- OVERRIDE BOOTSTRAP DEFAULTS --- */
+        /* --- BOOTSTRAP OVERRIDES --- */
         .text-primary { color: var(--primary) !important; }
         .bg-primary { background-color: var(--primary) !important; }
-        
-        /* New Utility Class for Accent */
         .text-accent { color: var(--accent) !important; }
         .bg-accent { background-color: var(--accent) !important; }
         
@@ -44,9 +41,7 @@
             background-color: var(--primary) !important; 
             border-color: var(--primary) !important; 
         }
-        .btn-primary:hover { 
-            filter: brightness(90%); 
-        }
+        .btn-primary:hover { filter: brightness(90%); }
         
         .btn-outline-primary { 
             color: var(--primary) !important; 
@@ -57,19 +52,207 @@
             color: white !important; 
         }
 
-        /* Smooth scrolling */
-        html { scroll-behavior: smooth; }
+        /* Navbar Styling */
+        .navbar {
+            background-color: rgba(255, 255, 255, 0.95) !important;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            top: 0;
+            width: 100%;
+            z-index: 1050;
+        }
+        
+        /* Card Styling */
+        .card { 
+            border: none;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+        }
+
+        /* --- CHATBOT WIDGET STYLES --- */
+        #chat-widget-container {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: end;
+            /* Allow clicks to pass through the container, but catch them on children */
+            pointer-events: none; 
+        }
+
+        /* Enable pointer events for the button and window */
+        #chat-toggle-btn, #chat-window {
+            pointer-events: auto;
+        }
+
+        /* Floating Toggle Button */
+        #chat-toggle-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        #chat-toggle-btn:hover { transform: scale(1.05); box-shadow: 0 8px 16px rgba(0,0,0,0.2); }
+        #chat-toggle-btn.open { transform: rotate(45deg); background-color: #ef4444; }
+
+        /* Chat Window */
+        #chat-window {
+            width: 400px;
+            height: 550px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.15);
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(20px) scale(0.95);
+            pointer-events: none; /* Hide interaction when closed */
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            border: 1px solid rgba(0,0,0,0.05);
+            visibility: hidden; /* Hide completely when closed */
+        }
+        #chat-window.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+            visibility: visible;
+        }
+
+        /* Chat Header */
+        .chat-header {
+            background: var(--primary); /* Uses Dashboard Primary Color */
+            color: white;
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* Messages Area */
+        #chat-messages {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .message {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            position: relative;
+            word-wrap: break-word;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .message.bot {
+            align-self: flex-start;
+            background: var(--bg-body); /* Light Gray */
+            color: #1e293b;
+            border-bottom-left-radius: 2px;
+        }
+        .message.user {
+            align-self: flex-end;
+            background: var(--primary); /* Brand Color */
+            color: white;
+            border-bottom-right-radius: 2px;
+        }
+        
+        /* Typing Indicator */
+        .typing-indicator {
+            align-self: flex-start;
+            background: var(--bg-body);
+            padding: 8px 12px;
+            border-radius: 12px;
+            display: none;
+            width: fit-content;
+        }
+        .typing-dots span {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: #94a3b8;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out both;
+            margin: 0 2px;
+        }
+        .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+        /* Input Area */
+        .chat-input-area {
+            padding: 15px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            gap: 10px;
+        }
+        .chat-input {
+            flex-grow: 1;
+            border: 1px solid #e2e8f0;
+            border-radius: 24px;
+            padding: 10px 16px;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+            background-color: #f8fafc;
+        }
+        .chat-input:focus { border-color: var(--primary); background-color: #fff; }
+        .chat-send-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .chat-send-btn:hover { transform: scale(1.1); }
+        
+        .source-tag { 
+            font-size: 0.7rem; 
+            color: #64748b; 
+            margin-top: 6px; 
+            display: inline-block; 
+            background: white;
+            border: 1px solid #e2e8f0;
+            padding: 4px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .source-tag:hover { background: #f1f5f9; border-color: var(--primary); color: var(--primary); }
     </style>
 
     {% block extra_css %}{% endblock %}
 </head>
 <body>
 
-    <nav class="navbar navbar-expand-lg bg-white border-bottom py-3 sticky-top">
+    <nav class="navbar navbar-expand-lg fixed-top py-3">
         <div class="container-fluid px-4 px-lg-5">
             <a class="navbar-brand fw-bold text-dark d-flex align-items-center gap-2" href="#">
                 {% if branding.site_logo %}
-                    <img src="{{ branding.site_logo.url }}" alt="Logo" height="32" class="d-inline-block align-text-top">
+                    <img src="{{ branding.site_logo.url }}" alt="Logo" height="32" class="d-inline-block align-text-top rounded-circle">
                 {% else %}
                     <i class="fas fa-layer-group text-primary"></i>
                 {% endif %}
@@ -107,8 +290,152 @@
 
     {% block content %}{% endblock %}
 
+    {% if user.is_authenticated %}
+    <div id="chat-widget-container">
+        
+        <div id="chat-window">
+            <div class="chat-header">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="bg-white bg-opacity-25 rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                        <i class="fas fa-robot text-white small"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-0 fw-bold">AI Assistant</h6>
+                        <small class="opacity-75" style="font-size: 0.7rem;">Powered by Ollama</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="chat-messages">
+                <div class="message bot">
+                    Hello {{ user.first_name }}! 👋<br>I can help you with questions about VESIT, academic policies, or your schedule.
+                </div>
+                <div class="typing-indicator" id="typing-indicator">
+                    <div class="typing-dots"><span></span><span></span><span></span></div>
+                </div>
+            </div>
+
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" class="chat-input" placeholder="Ask a question..." autocomplete="off">
+                <button id="chat-send" class="chat-send-btn">
+                    <i class="fas fa-paper-plane fa-sm"></i>
+                </button>
+            </div>
+        </div>
+
+        <button id="chat-toggle-btn">
+            <i class="fas fa-comment-alt"></i>
+        </button>
+    </div>
+    {% endif %}
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const toggleBtn = document.getElementById('chat-toggle-btn');
+            const chatWindow = document.getElementById('chat-window');
+            const input = document.getElementById('chat-input');
+            const sendBtn = document.getElementById('chat-send');
+            const messagesContainer = document.getElementById('chat-messages');
+            const typingIndicator = document.getElementById('typing-indicator');
+            const icon = toggleBtn ? toggleBtn.querySelector('i') : null;
+
+            if (toggleBtn) {
+                // 1. Toggle Chat Window
+                toggleBtn.addEventListener('click', () => {
+                    chatWindow.classList.toggle('visible');
+                    toggleBtn.classList.toggle('open');
+                    
+                    if (chatWindow.classList.contains('visible')) {
+                        icon.classList.remove('fa-comment-alt');
+                        icon.classList.add('fa-times');
+                        input.focus();
+                    } else {
+                        icon.classList.remove('fa-times');
+                        icon.classList.add('fa-comment-alt');
+                    }
+                });
+
+                // 2. Add Message Function
+                function addMessage(text, type, sources=[]) {
+                    const div = document.createElement('div');
+                    div.className = `message ${type}`;
+                    
+                    let contentHtml = text;
+                    
+                    if (sources && sources.length > 0) {
+                        contentHtml += '<div style="margin-top:8px;">';
+                        sources.forEach(src => {
+                            const fileName = src.split(/[\\/]/).pop();
+                            contentHtml += `<div class="source-tag" onclick="window.open('/api/download/${fileName}/', '_blank')">📄 ${fileName}</div>`;
+                        });
+                        contentHtml += '</div>';
+                    }
+                    div.innerHTML = contentHtml;
+                    
+                    // Insert before typing indicator
+                    messagesContainer.insertBefore(div, typingIndicator);
+                    scrollToBottom();
+                }
+
+                function scrollToBottom() {
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+
+                // 3. Handle Send
+                async function handleSend() {
+                    const question = input.value.trim();
+                    if (!question) return;
+
+                    // UI Updates
+                    addMessage(question, 'user');
+                    input.value = '';
+                    typingIndicator.style.display = 'block';
+                    scrollToBottom();
+
+                    try {
+                        // FIX: URL is now a relative path to Django, not Flask
+                        const response = await fetch('/api/chat/', {
+                            method: 'POST',
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': '{{ csrf_token }}' 
+                            },
+                            body: JSON.stringify({
+                                question: question,
+                                portal: "About VESIT", // Default context
+                                session_id: "{{ user.id }}"
+                            })
+                        });
+
+                        const data = await response.json();
+                        
+                        // Hide typing, show answer
+                        typingIndicator.style.display = 'none';
+                        
+                        if (data.error) {
+                            addMessage("Sorry, I encountered an error: " + data.error, "bot");
+                        } else {
+                            addMessage(data.answer, "bot", data.sources);
+                        }
+
+                    } catch (error) {
+                        console.error(error);
+                        typingIndicator.style.display = 'none';
+                        addMessage("Error: Could not connect to the AI service.", "bot");
+                    }
+                }
+
+                sendBtn.addEventListener('click', handleSend);
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') handleSend();
+                });
+            }
+        });
+    </script>
+
     {% block extra_js %}{% endblock %}
 </body>
 </html>

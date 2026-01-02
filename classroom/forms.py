@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from .models import User, Classroom, Booking, Feedback, SystemConfig, AuthorizedEmail
 
-# --- CONSTANTS & LOGIC ---
+# --- COLLEGE CONSTANTS ---
 DEPT_CHOICES = [
     ('Computer Engineering', 'Computer Engineering'),
     ('Electronics & Telecom (EXTC)', 'Electronics & Telecom (EXTC)'),
@@ -11,38 +11,24 @@ DEPT_CHOICES = [
     ('Chemical Engineering', 'Chemical Engineering'),
 ]
 
-YEAR_CHOICES = [
-    ('FE', 'First Year (FE)'),
-    ('SE', 'Second Year (SE)'),
-    ('TE', 'Third Year (TE)'),
-    ('BE', 'Final Year (BE)'),
-]
+YEAR_CHOICES = [('FE', 'First Year'), ('SE', 'Second Year'), ('TE', 'Third Year'), ('BE', 'Final Year')]
+SEM_CHOICES = [(f'Sem {i}', f'Sem {i}') for i in range(1, 9)]
+DIV_CHOICES = [('A', 'A'), ('B', 'B'), ('C', 'C')]
 
-SEM_CHOICES = [
-    ('Sem 1', 'Sem 1'), ('Sem 2', 'Sem 2'),
-    ('Sem 3', 'Sem 3'), ('Sem 4', 'Sem 4'),
-    ('Sem 5', 'Sem 5'), ('Sem 6', 'Sem 6'),
-    ('Sem 7', 'Sem 7'), ('Sem 8', 'Sem 8'),
+# --- CORPORATE CONSTANTS ---
+CORP_DEPT_CHOICES = [
+    ('Engineering', 'Engineering'), ('Marketing', 'Marketing'),
+    ('Sales', 'Sales'), ('HR', 'HR'), ('Finance', 'Finance'),
 ]
+CORP_LEVEL_CHOICES = [('Junior', 'Junior'), ('Mid-Level', 'Mid-Level'), ('Senior', 'Senior'), ('Executive', 'Executive')]
 
-DIV_CHOICES = [
-    ('A', 'A'),
-    ('B', 'B'),
-    ('C', 'C'),
-]
-
+# --- HELPERS ---
 def get_allowed_divisions(department):
-    """Return allowed divisions based on department rules."""
-    if department == 'Computer Engineering':
-        return ['A', 'B', 'C']
-    elif department in ['Electronics & Telecom (EXTC)', 'Mechanical Engineering']:
-        return ['A', 'B']
-    elif department in ['Civil Engineering', 'Chemical Engineering']:
-        return [] # No division option
+    if department == 'Computer Engineering': return ['A', 'B', 'C']
+    elif department in ['Electronics & Telecom (EXTC)', 'Mechanical Engineering']: return ['A', 'B']
     return []
 
 def get_allowed_semesters(year):
-    """Return allowed semesters based on year."""
     if year == 'FE': return ['Sem 1', 'Sem 2']
     if year == 'SE': return ['Sem 3', 'Sem 4']
     if year == 'TE': return ['Sem 5', 'Sem 6']
@@ -50,9 +36,7 @@ def get_allowed_semesters(year):
     return []
 
 class UserRegistrationForm(UserCreationForm):
-    # Only ask for Email. Everything else is fetched from DB.
     email = forms.EmailField(widget=forms.EmailInput(attrs={'class': 'form-control'}))
-    
     class Meta:
         model = User
         fields = ['email', 'password1', 'password2'] 
@@ -65,67 +49,43 @@ class UserRegistrationForm(UserCreationForm):
     def clean_email(self):
         email = self.cleaned_data.get('email')
         if User.objects.filter(email=email).exists():
-            raise forms.ValidationError("This email is already registered.")
-        
+            raise forms.ValidationError("Email already registered.")
         if not AuthorizedEmail.objects.filter(email=email).exists():
-            raise forms.ValidationError("This email is not authorized for registration. Contact Admin.")
-        
+            raise forms.ValidationError("Email not authorized.")
         return email
 
     def save(self, commit=True):
         user = super().save(commit=False)
         email = self.cleaned_data['email']
-        
-        # Fetch details from Verification DB
         auth_entry = AuthorizedEmail.objects.get(email=email)
-        
         user.username = email 
         user.email = email
         user.role = auth_entry.role
         user.first_name = auth_entry.first_name
         user.last_name = auth_entry.last_name
         
-        # Decouple Faculty logic
         if auth_entry.role == 'Student':
             user.department = auth_entry.department
             user.year = auth_entry.year
             user.division = auth_entry.division
-        else:
-            user.department = None
-            user.year = None
-            user.division = None
         
-        if commit:
-            user.save()
+        if commit: user.save()
         return user
 
 class UserLoginForm(AuthenticationForm):
-    username = forms.EmailField(
-        widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'Institutional Email'}),
-        label="Email Address"
-    )
-    password = forms.CharField(
-        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Password'})
-    )
+    username = forms.EmailField(widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'Email'}), label="Email")
+    password = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Password'}))
 
     def clean_username(self):
         email = self.cleaned_data.get('username')
-        if email:
+        config = SystemConfig.get_config()
+        if email and config.org_type == 'College':
             if not (email.endswith('.ac.in') or email.endswith('.edu')):
-                raise forms.ValidationError("Only .ac.in or .edu email addresses are allowed.")
+                raise forms.ValidationError("Use institutional email (.ac.in/.edu).")
         return email
 
 class ForgotPasswordForm(forms.Form):
-    email = forms.EmailField(
-        widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'Enter your registered email'}),
-        label="Email Address"
-    )
-
-    def clean_email(self):
-        email = self.cleaned_data.get('email')
-        if not (email.endswith('.ac.in') or email.endswith('.edu')):
-            raise forms.ValidationError("Invalid domain. Use your institutional email.")
-        return email
+    email = forms.EmailField(widget=forms.EmailInput(attrs={'class': 'form-control'}), label="Email Address")
 
 class ClassroomForm(forms.ModelForm):
     class Meta:
@@ -138,19 +98,17 @@ class ClassroomForm(forms.ModelForm):
         }
 
 class BookingForm(forms.ModelForm):
-    department = forms.ChoiceField(choices=[('', '---------')] + DEPT_CHOICES, required=False, widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_department'}))
-    year = forms.ChoiceField(choices=[('', '---------')] + YEAR_CHOICES, required=False, widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_year'}))
-    semester = forms.ChoiceField(choices=[('', '---------')] + SEM_CHOICES, required=False, widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_semester'}))
-    division = forms.ChoiceField(choices=[('', '---------')] + DIV_CHOICES, required=False, widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_division'}))
+    department = forms.ChoiceField(choices=[('', '---------')], required=False, widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_department'}))
+    year = forms.ChoiceField(choices=[('', '---------')], required=False, widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_year'}))
+    semester = forms.ChoiceField(choices=[('', '---------')], required=False, widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_semester'}))
+    division = forms.ChoiceField(choices=[('', '---------')], required=False, widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_division'}))
     
-    # Subject is populated via AJAX
+    # Placeholder; actual widget logic is in __init__
     subject = forms.CharField(required=False, widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_subject'})) 
 
     class Meta:
         model = Booking
-        fields = ['classroom', 'booking_date', 'slot', 'subject',
-                  'is_guest_lecture', 'lecture_title', 'guest_speaker', 
-                  'department', 'year', 'division', 'semester']
+        fields = ['classroom', 'booking_date', 'slot', 'subject', 'is_guest_lecture', 'lecture_title', 'guest_speaker', 'department', 'year', 'division', 'semester']
         widgets = {
             'classroom': forms.Select(attrs={'class': 'form-select'}),
             'booking_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
@@ -162,42 +120,53 @@ class BookingForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        config = SystemConfig.get_config()
-        self.fields['slot'].widget.choices = [(s, s) for s in config.class_slots]
-        self.fields['subject'].widget.choices = []
+        self.config = SystemConfig.get_config()
+        self.fields['slot'].widget.choices = [(s, s) for s in self.config.class_slots]
+
+        if self.config.org_type == 'Corporate':
+            # --- CORPORATE CONFIGURATION ---
+            self.fields['department'].choices = [('', '---------')] + CORP_DEPT_CHOICES
+            self.fields['year'].choices = [('', '---------')] + CORP_LEVEL_CHOICES
+            self.fields['year'].label = "Level"
+            
+            # Disable academic fields so they don't block validation visually
+            # (Note: Logic in views.py handles the actual data cleaning)
+            self.fields['semester'].widget.attrs['disabled'] = True
+            self.fields['division'].widget.attrs['disabled'] = True
+            
+            # Change Subject to simple Text Input
+            self.fields['subject'].widget = forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter Meeting Topic'})
+            self.fields['subject'].label = "Topic"
+        else:
+            # --- COLLEGE CONFIGURATION ---
+            self.fields['department'].choices = [('', '---------')] + DEPT_CHOICES
+            self.fields['year'].choices = [('', '---------')] + YEAR_CHOICES
+            self.fields['semester'].choices = [('', '---------')] + SEM_CHOICES
+            self.fields['division'].choices = [('', '---------')] + DIV_CHOICES
+            
+            # Keep Subject as Select (AJAX populated)
+            self.fields['subject'].widget = forms.Select(attrs={'class': 'form-select', 'id': 'id_subject'})
+            self.fields['subject'].widget.choices = []
 
     def clean(self):
         cleaned_data = super().clean()
-        is_guest = cleaned_data.get('is_guest_lecture')
-        department = cleaned_data.get('department')
-        year = cleaned_data.get('year')
-        semester = cleaned_data.get('semester')
-        division = cleaned_data.get('division')
-
-        if is_guest:
-            if not cleaned_data.get('lecture_title'):
-                self.add_error('lecture_title', "Lecture Title is required for Guest Lectures.")
-            if not cleaned_data.get('guest_speaker'):
-                self.add_error('guest_speaker', "Speaker Name is required for Guest Lectures.")
+        if cleaned_data.get('is_guest_lecture'):
+            if not cleaned_data.get('lecture_title'): self.add_error('lecture_title', "Title is required.")
+            if not cleaned_data.get('guest_speaker'): self.add_error('guest_speaker', "Speaker is required.")
         else:
-            if not cleaned_data.get('subject'):
-                 self.add_error('subject', "Subject is required for regular lectures.")
-
-            # Validate Semester matches Year
-            allowed_sems = get_allowed_semesters(year)
-            if semester not in allowed_sems:
-                self.add_error('semester', f"Invalid semester for {year}. Allowed: {', '.join(allowed_sems)}")
-
-            # Validate Division matches Department
-            allowed_divs = get_allowed_divisions(department)
-            if allowed_divs:
-                if not division:
-                    self.add_error('division', "Division is required for this department.")
-                elif division not in allowed_divs:
-                    self.add_error('division', f"Invalid division. Allowed: {', '.join(allowed_divs)}")
+            if not cleaned_data.get('subject'): self.add_error('subject', "Subject/Topic is required.")
+            
+            # Academic Validation only for Colleges
+            if self.config.org_type == 'College':
+                allowed_sems = get_allowed_semesters(cleaned_data.get('year'))
+                if cleaned_data.get('semester') not in allowed_sems:
+                    # We skip this error if semester is None (handled in views for corporate)
+                    if cleaned_data.get('semester'):
+                        self.add_error('semester', f"Invalid semester for {cleaned_data.get('year')}")
             else:
+                # Corporate cleanup
+                cleaned_data['semester'] = None
                 cleaned_data['division'] = None
-
         return cleaned_data
 
 class FeedbackForm(forms.ModelForm):
@@ -209,40 +178,29 @@ class FeedbackForm(forms.ModelForm):
             'comments': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
 
-# --- NEW: SYSTEM BRANDING FORM ---
 class SystemBrandingForm(forms.ModelForm):
-    # Security Field: Confirm Password
-    confirm_password = forms.CharField(
-        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Required to save changes'}),
-        label="Admin Password Verification",
-        required=True
-    )
-
+    confirm_password = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control'}), label="Admin Password", required=True)
     class Meta:
         model = SystemConfig
-        fields = ['site_name', 'site_logo', 'primary_color', 'accent_color', 'secondary_color']
+        fields = ['site_name', 'site_logo', 'org_type', 'primary_color', 'accent_color', 'secondary_color', 'navbar_color', 'sidebar_color']
         widgets = {
             'site_name': forms.TextInput(attrs={'class': 'form-control'}),
-            'primary_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control form-control-color'}),
-            'accent_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control form-control-color', 'title': 'Optional Accent'}),
-            'secondary_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control form-control-color'}),
+            'org_type': forms.Select(attrs={'class': 'form-select'}),
+            'primary_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control'}),
+            'accent_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control'}),
+            'secondary_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control'}),
+            'navbar_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control'}),
+            'sidebar_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control'}),
             'site_logo': forms.FileInput(attrs={'class': 'form-control'}),
         }
-
+    
     def __init__(self, *args, **kwargs):
-        # Pop 'user' before init so the parent class doesn't choke on it
         self.user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
-        
-        # Make specific fields optional in the form UI
-        self.fields['site_name'].required = False
-        self.fields['primary_color'].required = False
-        self.fields['accent_color'].required = False
-        self.fields['secondary_color'].required = False
-        self.fields['site_logo'].required = False
+        for f in ['site_name', 'primary_color', 'site_logo']: self.fields[f].required = False
 
     def clean_confirm_password(self):
         password = self.cleaned_data.get('confirm_password')
         if not self.user or not self.user.check_password(password):
-            raise forms.ValidationError("Incorrect password. Changes rejected.")
+            raise forms.ValidationError("Incorrect password.")
         return password

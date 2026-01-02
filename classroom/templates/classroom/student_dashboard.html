@@ -1,12 +1,13 @@
 {% extends 'classroom/base.html' %}
 {% load crispy_forms_tags %}
 
-{% block title %}Student Workspace{% endblock %}
+{% block title %}
+    {% if config.org_type == 'Corporate' %}Employee Workspace{% else %}Student Workspace{% endif %}
+{% endblock %}
 
 {% block extra_css %}
 <style>
-    /* --- TIMELINE STYLES --- */
-    /* Custom Pulse Animation for Live Classes */
+    /* --- TIMELINE SPECIFIC STYLES --- */
     @keyframes pulse-green {
         0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
         70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
@@ -19,74 +20,23 @@
     .avatar-icon { width: 24px; height: 24px; line-height: 24px; font-size: 0.75rem; }
     
     /* Status Colors */
-    .status-line-live { background-color: #10b981 !important; } /* Green */
-    .status-line-upcoming { background-color: #3b82f6 !important; } /* Blue */
-    .status-line-completed { background-color: #cbd5e1 !important; } /* Gray */
+    .status-line-live { background-color: #10b981 !important; }
+    .status-line-upcoming { background-color: #3b82f6 !important; }
+    .status-line-completed { background-color: #cbd5e1 !important; }
 
-    /* --- AWARD-WINNING FEEDBACK UI --- */
-    .modal-content {
-        border: none;
-        border-radius: 28px; /* Super rounded modern look */
-        overflow: hidden;
-    }
-
-    /* Star Rating Widget (Pure CSS Interactive) */
-    .star-rating-widget {
-        display: flex;
-        flex-direction: row-reverse; /* Magic trick: allows selecting previous siblings */
-        justify-content: center;
-        gap: 8px;
-        padding: 10px 0;
-    }
+    /* --- FEEDBACK UI --- */
+    .modal-content { border: none; border-radius: 28px; overflow: hidden; }
+    .star-rating-widget { display: flex; flex-direction: row-reverse; justify-content: center; gap: 8px; padding: 10px 0; }
     .star-rating-widget input { display: none; }
+    .star-rating-widget label { font-size: 2.5rem; color: #e2e8f0; cursor: pointer; transition: transform 0.2s; }
+    .star-rating-widget input:checked ~ label, .star-rating-widget label:hover, .star-rating-widget label:hover ~ label { color: #fbbf24; }
+    .star-rating-widget label:hover { transform: scale(1.2); }
     
-    .star-rating-widget label {
-        font-size: 2.5rem;
-        color: #e2e8f0; /* Inactive Gray */
-        cursor: pointer;
-        transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), color 0.2s;
-    }
-
-    /* Hover & Checked States */
-    .star-rating-widget input:checked ~ label,
-    .star-rating-widget label:hover,
-    .star-rating-widget label:hover ~ label {
-        color: #fbbf24; /* Amber-400 */
-    }
+    .feedback-textarea { background-color: #f8fafc; border: 2px solid transparent; border-radius: 16px; resize: none; }
+    .feedback-textarea:focus { background-color: #ffffff; border-color: #e2e8f0; box-shadow: 0 4px 20px rgba(0,0,0,0.05); outline: none; }
     
-    /* Pop animation on hover */
-    .star-rating-widget label:hover {
-        transform: scale(1.2);
-    }
-
-    /* Textarea Polish */
-    .feedback-textarea {
-        background-color: #f8fafc;
-        border: 2px solid transparent;
-        border-radius: 16px;
-        resize: none;
-        transition: all 0.3s ease;
-        font-size: 0.95rem;
-    }
-    .feedback-textarea:focus {
-        background-color: #ffffff;
-        border-color: #e2e8f0;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-        outline: none;
-    }
-
-    /* Submit Button Polish */
-    .btn-gradient-primary {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        color: white;
-        border: none;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    .btn-gradient-primary:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 20px -10px rgba(15, 23, 42, 0.5);
-        color: white;
-    }
+    .btn-gradient-primary { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: white; border: none; }
+    .btn-gradient-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -10px rgba(15, 23, 42, 0.5); color: white; }
 </style>
 {% endblock %}
 
@@ -95,51 +45,34 @@
     
     <div class="row align-items-end mb-5">
         <div class="col-md-8">
-            <h6 class="text-uppercase text-muted fw-bold small letter-spacing-1 mb-1">Student Portal</h6>
+            <h6 class="text-uppercase text-muted fw-bold small letter-spacing-1 mb-1">
+                {% if config.org_type == 'Corporate' %}Employee Portal{% else %}Student Portal{% endif %}
+            </h6>
             <h2 class="fw-bold text-dark mb-0 display-6">Today's Schedule</h2>
             <p class="text-muted mb-0 mt-2">{{ today|date:"l, F jS, Y" }}</p>
         </div>
-        
         <div class="col-md-4 text-md-end mt-3 mt-md-0">
              <div class="d-inline-flex bg-white border p-1 rounded-pill shadow-sm">
-                <button onclick="filterTimeline('all')" id="btn-all" class="btn btn-sm rounded-pill px-3 fw-bold bg-dark text-white shadow-sm transition-all filter-btn">
-                    All
-                </button>
-                <button onclick="filterTimeline('Live Now')" id="btn-live" class="btn btn-sm rounded-pill px-3 fw-bold text-muted transition-all filter-btn">
-                    <i class="fas fa-circle fa-xs text-success me-1"></i> Live
-                </button>
-                <button onclick="filterTimeline('Upcoming')" id="btn-upcoming" class="btn btn-sm rounded-pill px-3 fw-bold text-muted transition-all filter-btn">
-                    Upcoming
-                </button>
+                <button onclick="filterTimeline('all')" id="btn-all" class="btn btn-sm rounded-pill px-3 fw-bold bg-dark text-white shadow-sm filter-btn">All</button>
+                <button onclick="filterTimeline('Live Now')" id="btn-live" class="btn btn-sm rounded-pill px-3 fw-bold text-muted filter-btn"><i class="fas fa-circle fa-xs text-success me-1"></i> Live</button>
+                <button onclick="filterTimeline('Upcoming')" id="btn-upcoming" class="btn btn-sm rounded-pill px-3 fw-bold text-muted filter-btn">Upcoming</button>
             </div>
         </div>
     </div>
 
     <div class="row g-5">
-        
         <div class="col-lg-8">
-            
             <div class="d-flex flex-column gap-4" id="timelineContainer">
                 {% for item in timeline %}
-                <div class="card border-0 shadow-sm rounded-4 overflow-hidden position-relative transition-hover timeline-item" 
-                     data-status="{{ item.status }}"
-                     id="card-{{ item.obj.id }}">
-                    
-                    <div id="strip-{{ item.obj.id }}" 
-                         class="position-absolute top-0 bottom-0 start-0 {% if item.status == 'Live Now' %}status-line-live{% elif item.status == 'Completed' %}status-line-completed{% else %}status-line-upcoming{% endif %}" 
-                         style="width: 6px;">
-                    </div>
-
+                <div class="card border-0 shadow-sm rounded-4 overflow-hidden position-relative transition-hover timeline-item" data-status="{{ item.status }}" id="card-{{ item.obj.id }}">
+                    <div id="strip-{{ item.obj.id }}" class="position-absolute top-0 bottom-0 start-0 {% if item.status == 'Live Now' %}status-line-live{% elif item.status == 'Completed' %}status-line-completed{% else %}status-line-upcoming{% endif %}" style="width: 6px;"></div>
                     <div class="card-body p-4 ps-5">
                         <div class="row align-items-center">
-                            
                             <div class="col-md-3 border-end border-light mb-3 mb-md-0">
                                 <h5 class="fw-bold mb-1 text-dark slot-time">{{ item.obj.slot }}</h5>
                                 <div id="badge-{{ item.obj.id }}" class="status-badge-container">
                                     {% if item.status == 'Live Now' %}
-                                        <span class="badge bg-success text-white rounded-pill animate-pulse px-3 border border-success">
-                                            <i class="fas fa-circle fa-xs me-1"></i> Live
-                                        </span>
+                                        <span class="badge bg-success text-white rounded-pill animate-pulse px-3 border border-success"><i class="fas fa-circle fa-xs me-1"></i> Live</span>
                                     {% elif item.status == 'Completed' %}
                                         <span class="text-muted small fw-semibold bg-light px-2 py-1 rounded">Completed</span>
                                     {% else %}
@@ -147,52 +80,24 @@
                                     {% endif %}
                                 </div>
                             </div>
-
                             <div class="col-md-6 ps-md-4">
                                 <h5 class="fw-bold text-dark mb-1">
                                     {% if item.obj.is_guest_lecture %}
-                                        {{ item.obj.lecture_title }} 
-                                        <span class="badge ms-2 text-uppercase fw-bold shadow-sm" 
-                                              style="background-color: var(--accent, #f59e0b); color: white; font-size: 0.65rem;">
-                                            Guest
-                                        </span>
-                                    {% else %}
-                                        {{ item.obj.subject }}
-                                    {% endif %}
+                                        {{ item.obj.lecture_title }} <span class="badge ms-2 text-uppercase fw-bold shadow-sm" style="background-color: var(--accent, #f59e0b); color: white; font-size: 0.65rem;">{% if config.org_type == 'Corporate' %}External{% else %}Guest{% endif %}</span>
+                                    {% else %}{{ item.obj.subject }}{% endif %}
                                 </h5>
                                 <div class="d-flex align-items-center text-muted small mt-2 gap-3">
-                                    <div class="d-flex align-items-center">
-                                        <div class="avatar-icon bg-light rounded-circle me-2 text-center text-secondary">
-                                            <i class="fas fa-user"></i>
-                                        </div>
-                                        {{ item.obj.faculty_name }}
-                                    </div>
-                                    <div class="d-flex align-items-center">
-                                        <div class="avatar-icon bg-light rounded-circle me-2 text-center text-secondary">
-                                            <i class="fas fa-map-marker-alt"></i>
-                                        </div>
-                                        Room {{ item.obj.classroom.room_number }}
-                                    </div>
+                                    <div class="d-flex align-items-center"><div class="avatar-icon bg-light rounded-circle me-2 text-center text-secondary"><i class="fas fa-user"></i></div>{{ item.obj.faculty_name }}</div>
+                                    <div class="d-flex align-items-center"><div class="avatar-icon bg-light rounded-circle me-2 text-center text-secondary"><i class="fas fa-map-marker-alt"></i></div>{% if config.org_type == 'Corporate' %}Space{% else %}Room{% endif %} {{ item.obj.classroom.room_number }}</div>
                                 </div>
                             </div>
-
                             <div class="col-md-3 text-md-end mt-3 mt-md-0" id="action-{{ item.obj.id }}">
                                 {% if item.has_feedback %}
-                                    <button class="btn btn-light text-muted btn-sm rounded-pill px-3 border" disabled>
-                                        <i class="fas fa-check-circle me-1 text-success"></i> Rated
-                                    </button>
+                                    <button class="btn btn-light text-muted btn-sm rounded-pill px-3 border" disabled><i class="fas fa-check-circle me-1 text-success"></i> Rated</button>
                                 {% elif item.can_feedback %}
-                                    <button type="button" 
-                                            class="btn btn-dark btn-sm rounded-pill px-4 shadow-sm fw-bold btn-rate"
-                                            data-bs-toggle="modal" 
-                                            data-bs-target="#feedbackModal"
-                                            onclick="setFeedbackUrl('{% url 'classroom:submit_feedback' item.obj.id %}', '{{ item.obj.subject|default:item.obj.lecture_title|escapejs }}')">
-                                        Rate Class
-                                    </button>
+                                    <button type="button" class="btn btn-dark btn-sm rounded-pill px-4 shadow-sm fw-bold btn-rate" data-bs-toggle="modal" data-bs-target="#feedbackModal" onclick="setFeedbackUrl('{% url 'classroom:submit_feedback' item.obj.id %}', '{{ item.obj.subject|default:item.obj.lecture_title|escapejs }}')">Rate</button>
                                 {% else %}
-                                    <button class="btn btn-light text-muted btn-sm rounded-pill px-3 border btn-wait" disabled>
-                                        Wait to Rate
-                                    </button>
+                                    <button class="btn btn-light text-muted btn-sm rounded-pill px-3 border btn-wait" disabled>Wait to Rate</button>
                                 {% endif %}
                             </div>
                         </div>
@@ -200,31 +105,20 @@
                 </div>
                 {% empty %}
                 <div class="text-center py-5 bg-white rounded-4 border border-dashed">
-                    <div class="mb-3">
-                        <span class="fa-stack fa-2x opacity-25 text-muted">
-                            <i class="fas fa-circle fa-stack-2x"></i>
-                            <i class="fas fa-calendar-day fa-stack-1x fa-inverse"></i>
-                        </span>
-                    </div>
-                    <h5 class="text-muted fw-normal">No lectures scheduled for today.</h5>
-                    <p class="text-muted small">Enjoy your free time!</p>
+                    <h5 class="text-muted fw-normal">No events scheduled.</h5>
                 </div>
                 {% endfor %}
-                
                 <div id="no-filter-results" class="text-center py-5 bg-white rounded-4 border border-dashed" style="display: none;">
-                    <h5 class="text-muted fw-normal">No lectures found for this filter.</h5>
+                    <h5 class="text-muted fw-normal">No results found for this filter.</h5>
                 </div>
             </div>
-
+            
             {% if is_searching %}
             <div class="mt-5 pt-4 border-top">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h4 class="fw-bold mb-0">Search Results</h4>
-                    <a href="{% url 'classroom:student_dashboard' %}" class="btn btn-light btn-sm rounded-pill border px-3">
-                        <i class="fas fa-times me-1"></i> Clear Search
-                    </a>
+                    <a href="{% url 'classroom:student_dashboard' %}" class="btn btn-light btn-sm rounded-pill border px-3"><i class="fas fa-times me-1"></i> Clear Search</a>
                 </div>
-                
                 <div class="row g-4">
                     {% for result in search_results %}
                     <div class="col-md-6">
@@ -234,30 +128,17 @@
                                     <span class="badge bg-light text-dark border">{{ result.booking_date|date:"M d" }} • {{ result.slot }}</span>
                                     <span class="fw-bold text-primary">R{{ result.classroom.room_number }}</span>
                                 </div>
-                                <h6 class="fw-bold mb-1 text-truncate" title="{{ result.subject|default:result.lecture_title }}">
-                                    {{ result.subject|default:result.lecture_title }}
-                                </h6>
-                                <p class="small text-muted mb-0">
-                                    <i class="fas fa-user-circle me-1"></i> {{ result.faculty_name }}
-                                </p>
+                                <h6 class="fw-bold mb-1 text-truncate">{{ result.subject|default:result.lecture_title }}</h6>
+                                <p class="small text-muted mb-0"><i class="fas fa-user-circle me-1"></i> {{ result.faculty_name }}</p>
                             </div>
                         </div>
                     </div>
                     {% empty %}
-                    <div class="col-12">
-                        <div class="alert alert-warning rounded-4 border-0 d-flex align-items-center shadow-sm">
-                            <i class="fas fa-search me-3 fs-4"></i>
-                            <div>
-                                <strong>No results found.</strong><br>
-                                Try adjusting your filters or date.
-                            </div>
-                        </div>
-                    </div>
+                    <div class="col-12"><div class="alert alert-warning rounded-4 border-0 shadow-sm">No results found.</div></div>
                     {% endfor %}
                 </div>
             </div>
             {% endif %}
-
         </div>
 
         <div class="col-lg-4">
@@ -268,14 +149,9 @@
                     </div>
                     <h4 class="fw-bold mb-0 text-dark">{{ user.first_name }} {{ user.last_name }}</h4>
                     <p class="text-muted small mb-3">{{ user.email }}</p>
-                    
                     <div class="d-flex justify-content-center gap-2 flex-wrap">
-                        {% if user.department %}
-                            <span class="badge bg-light text-dark border fw-normal py-2 px-3 rounded-pill">{{ user.department }}</span>
-                        {% endif %}
-                        {% if user.year and user.division %}
-                            <span class="badge bg-light text-dark border fw-normal py-2 px-3 rounded-pill">{{ user.year }} - {{ user.division }}</span>
-                        {% endif %}
+                        {% if user.department %}<span class="badge bg-light text-dark border fw-normal py-2 px-3 rounded-pill">{{ user.department }}</span>{% endif %}
+                        {% if user.year and user.division %}<span class="badge bg-light text-dark border fw-normal py-2 px-3 rounded-pill">{{ user.year }} - {{ user.division }}</span>{% endif %}
                     </div>
                 </div>
             </div>
@@ -283,35 +159,26 @@
             <div class="card border-0 shadow-sm rounded-4 bg-white">
                 <div class="card-header bg-white border-0 pt-4 px-4 pb-0">
                     <h5 class="fw-bold mb-1">Find Availability</h5>
-                    <p class="text-muted small">Look up rooms or other lectures.</p>
                 </div>
                 <div class="card-body p-4">
                     <form method="get" action=".">
                         <input type="hidden" name="action" value="search">
-                        
                         <div class="mb-3">
                             <label class="form-label small fw-bold text-muted letter-spacing-1">DATE</label>
                             <input type="date" name="date" class="form-control form-control-lg bg-light border-0 fs-6" value="{{ today|date:'Y-m-d' }}">
                         </div>
-                        
                         <div class="mb-3">
-                            <label class="form-label small fw-bold text-muted letter-spacing-1">SUBJECT</label>
+                            <label class="form-label small fw-bold text-muted letter-spacing-1">{% if config.org_type == 'Corporate' %}TOPIC{% else %}SUBJECT{% endif %}</label>
                             <select name="subject" class="form-select form-select-lg bg-light border-0 fs-6">
                                 <option value="">All Subjects</option>
-                                {% for s in student_subjects %}
-                                    <option value="{{ s.id }}">{{ s.name }}</option>
-                                {% endfor %}
+                                {% for s in student_subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
                             </select>
                         </div>
-
                         <div class="form-check form-switch mb-4">
                             <input class="form-check-input" type="checkbox" name="guest_only" id="guestCheck">
-                            <label class="form-check-label small text-muted fw-bold" for="guestCheck">Guest Lectures Only</label>
+                            <label class="form-check-label small text-muted fw-bold" for="guestCheck">{% if config.org_type == 'Corporate' %}External Only{% else %}Guest Only{% endif %}</label>
                         </div>
-
-                        <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold py-2 shadow-sm">
-                            <i class="fas fa-search me-2"></i> Search Schedule
-                        </button>
+                        <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold py-2 shadow-sm"><i class="fas fa-search me-2"></i> Search</button>
                     </form>
                 </div>
             </div>
@@ -322,42 +189,26 @@
 <div class="modal fade" id="feedbackModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content shadow-lg">
-            
             <div class="modal-header border-0 pb-0 pt-4 px-4 justify-content-end">
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            
             <div class="modal-body px-5 pb-5 pt-0 text-center">
-                <div class="mb-3">
-                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-light text-warning mb-2" style="width: 64px; height: 64px; background-color: #fffbeb;">
-                        <i class="fas fa-star fa-2x"></i>
-                    </div>
-                </div>
-
+                <div class="mb-3"><div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-light text-warning mb-2" style="width: 64px; height: 64px; background-color: #fffbeb;"><i class="fas fa-star fa-2x"></i></div></div>
                 <h4 class="fw-bold text-dark mb-1">Rate the Session</h4>
                 <p class="text-muted mb-4">How was <span id="modalSubjectName" class="fw-bolder text-dark"></span>?</p>
-                
                 <form method="post" id="feedbackFormAction">
                     {% csrf_token %}
-                    
                     <div class="star-rating-widget mb-4">
-                        <input type="radio" name="rating" id="star5" value="5" required><label for="star5" title="Amazing"><i class="fas fa-star"></i></label>
-                        <input type="radio" name="rating" id="star4" value="4"><label for="star4" title="Good"><i class="fas fa-star"></i></label>
-                        <input type="radio" name="rating" id="star3" value="3"><label for="star3" title="Average"><i class="fas fa-star"></i></label>
-                        <input type="radio" name="rating" id="star2" value="2"><label for="star2" title="Poor"><i class="fas fa-star"></i></label>
-                        <input type="radio" name="rating" id="star1" value="1"><label for="star1" title="Terrible"><i class="fas fa-star"></i></label>
+                        <input type="radio" name="rating" id="star5" value="5" required><label for="star5"><i class="fas fa-star"></i></label>
+                        <input type="radio" name="rating" id="star4" value="4"><label for="star4"><i class="fas fa-star"></i></label>
+                        <input type="radio" name="rating" id="star3" value="3"><label for="star3"><i class="fas fa-star"></i></label>
+                        <input type="radio" name="rating" id="star2" value="2"><label for="star2"><i class="fas fa-star"></i></label>
+                        <input type="radio" name="rating" id="star1" value="1"><label for="star1"><i class="fas fa-star"></i></label>
                     </div>
-                    
                     <div class="mb-4 text-start">
-                        <label class="form-label small text-uppercase fw-bold text-muted ps-2" style="font-size: 0.75rem; letter-spacing: 1px;">Your Thoughts (Optional)</label>
-                        <textarea name="comments" class="form-control feedback-textarea p-3" rows="3" placeholder="What did you learn? Was it helpful?"></textarea>
+                        <textarea name="comments" class="form-control feedback-textarea p-3" rows="3" placeholder="What did you learn?"></textarea>
                     </div>
-
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-gradient-primary rounded-pill py-3 fw-bold shadow-sm">
-                            Submit Review
-                        </button>
-                    </div>
+                    <div class="d-grid"><button type="submit" class="btn btn-gradient-primary rounded-pill py-3 fw-bold shadow-sm">Submit Review</button></div>
                 </form>
             </div>
         </div>
@@ -365,45 +216,37 @@
 </div>
 
 <script>
-    function setFeedbackUrl(url, subjectName) {
+    // --- DASHBOARD LOGIC (Timeline, Feedback) ---
+    function setFeedbackUrl(url, name) {
         document.getElementById('feedbackFormAction').action = url;
-        document.getElementById('modalSubjectName').innerText = subjectName;
+        document.getElementById('modalSubjectName').innerText = name;
     }
 
-    // --- AUTOMATIC STATUS CORRECTION (24hr Clock Fix) ---
     document.addEventListener('DOMContentLoaded', () => {
         const cards = document.querySelectorAll('.timeline-item');
         const now = new Date();
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
         cards.forEach(card => {
-            // 1. Get and Parse Time Slot
-            const slotText = card.querySelector('.slot-time').innerText.trim(); // "3:10 - 4:40"
+            const slotText = card.querySelector('.slot-time').innerText.trim();
             const [startStr, endStr] = slotText.split('-').map(s => s.trim());
-
-            // Helper to parse 12h time to minutes (assumes 1:00-6:00 is PM)
             const parseTime = (str) => {
                 let [h, m] = str.split(':').map(Number);
-                if (h >= 1 && h <= 6) h += 12; // Convert 1-6 to 13-18 (24hr)
+                if (h >= 1 && h <= 6) h += 12;
                 return h * 60 + m;
             };
-
             const startMin = parseTime(startStr);
             const endMin = parseTime(endStr);
 
-            // 2. Determine Correct Status
             let correctStatus = 'Upcoming';
             if (currentMinutes > endMin) correctStatus = 'Completed';
             else if (currentMinutes >= startMin) correctStatus = 'Live Now';
 
-            // 3. Update DOM if different
             card.setAttribute('data-status', correctStatus);
             
-            // Update Strip Color & Badge
             const strip = card.querySelector('[id^="strip-"]');
             const badgeContainer = card.querySelector('.status-badge-container');
             
-            // Reset Classes
             if(strip) strip.classList.remove('status-line-live', 'status-line-upcoming', 'status-line-completed');
             
             let badgeHtml = '';
@@ -419,8 +262,8 @@
             }
             if(badgeContainer) badgeContainer.innerHTML = badgeHtml;
         });
-        
-        // Re-run filter to apply new statuses
+
+        // Initial Filter Check
         const activeBtn = document.querySelector('.filter-btn.bg-dark');
         if(activeBtn) {
             if(activeBtn.innerText.includes('Live')) filterTimeline('Live Now');
@@ -429,57 +272,32 @@
         }
     });
 
-    // --- TIMELINE FILTER LOGIC ---
-    function filterTimeline(filterType) {
+    function filterTimeline(type) {
         const items = document.querySelectorAll('.timeline-item');
         const btns = document.querySelectorAll('.filter-btn');
-        let visibleCount = 0;
-
-        // 1. Update Button Styles
-        btns.forEach(btn => {
-            btn.classList.remove('bg-dark', 'text-white', 'shadow-sm');
-            btn.classList.add('text-muted');
-        });
-
-        // Set Active Button Logic
-        let activeBtnId = 'btn-all';
-        if (filterType === 'Live Now') activeBtnId = 'btn-live';
-        if (filterType === 'Upcoming') activeBtnId = 'btn-upcoming';
         
-        const activeBtn = document.getElementById(activeBtnId);
-        if(activeBtn) {
-            activeBtn.classList.remove('text-muted');
-            activeBtn.classList.add('bg-dark', 'text-white', 'shadow-sm');
-        }
-
-        // 2. Filter Items
-        items.forEach(item => {
-            const status = item.getAttribute('data-status');
-            let show = false;
-            
-            if (filterType === 'all') {
-                show = true;
-            } else if (status === filterType) {
-                show = true;
-            } else if (filterType === 'Upcoming' && status === 'Scheduled') {
-                show = true;
-            }
-
-            if (show) {
-                item.style.display = 'block';
-                visibleCount++;
-            } else {
-                item.style.display = 'none';
-            }
+        btns.forEach(b => {
+            b.classList.remove('bg-dark', 'text-white');
+            b.classList.add('text-muted');
         });
-
-        // 3. Show "No Results" message if empty
-        const noRes = document.getElementById('no-filter-results');
-        if (visibleCount === 0 && items.length > 0) {
-            noRes.style.display = 'block';
-        } else {
-            noRes.style.display = 'none';
+        
+        const activeId = type === 'Live Now' ? 'btn-live' : (type === 'Upcoming' ? 'btn-upcoming' : 'btn-all');
+        const activeBtn = document.getElementById(activeId);
+        if(activeBtn) {
+            activeBtn.classList.add('bg-dark', 'text-white');
+            activeBtn.classList.remove('text-muted');
         }
+
+        let count = 0;
+        items.forEach(item => {
+            const status = item.dataset.status;
+            let show = (type === 'all') || (status === type) || (type === 'Upcoming' && status === 'Scheduled');
+            item.style.display = show ? 'block' : 'none';
+            if(show) count++;
+        });
+        
+        const noRes = document.getElementById('no-filter-results');
+        if(noRes) noRes.style.display = count === 0 ? 'block' : 'none';
     }
 </script>
 {% endblock %}

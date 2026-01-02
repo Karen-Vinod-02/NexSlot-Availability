@@ -1,318 +1,490 @@
 {% extends 'classroom/base.html' %}
 {% load crispy_forms_tags %}
 
-{% block title %}Admin Dashboard{% endblock %}
+{% block title %}Admin Overview{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* --- DYNAMIC THEME ENGINE --- */
+    :root {
+        --brand-primary: {{ config.primary_color }};
+        --brand-secondary: {{ config.secondary_color }};
+        --brand-accent: {{ config.accent_color|default:"#F59E0B" }};
+        /* Generated Tints */
+        --brand-primary-soft: {{ config.primary_color }}1A; /* 10% opacity */
+        --brand-accent-soft: {{ config.accent_color|default:"#F59E0B" }}1A;
+        --brand-sidebar-bg: {{ config.sidebar_color|default:"#FFFFFF" }};
+    }
+
+    /* --- LAYOUT UTILITIES --- */
+    body { 
+        background-color: var(--brand-secondary, #F8FAFC); 
+        /* CRITICAL FIX: Push content down to prevent overlap with fixed navbar */
+        padding-top: 85px; 
+    }
+    
+    .card {
+        border: none;
+        border-radius: 20px;
+        box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.05); /* Softer, deeper shadow */
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        background: var(--brand-sidebar-bg, #FFFFFF);
+        overflow: hidden; /* Ensures content respects rounded corners */
+    }
+    .card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* --- WIDGET STYLES --- */
+    .icon-box {
+        width: 48px; height: 48px;
+        border-radius: 14px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.2rem;
+        transition: all 0.3s ease;
+    }
+    
+    /* --- CUSTOM GRAPH: HORIZONTAL BAR --- */
+    .bar-chart-row {
+        display: flex; align-items: center;
+        margin-bottom: 12px;
+    }
+    .bar-label {
+        width: 90px; font-size: 0.75rem; font-weight: 600; color: #64748b;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .bar-track {
+        flex-grow: 1; height: 8px; background: #f1f5f9; border-radius: 4px;
+        margin: 0 12px; overflow: hidden;
+    }
+    .bar-fill {
+        height: 100%; border-radius: 4px;
+        /* Gradient for a premium look */
+        background: linear-gradient(90deg, var(--brand-primary), var(--brand-accent)); 
+        transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .bar-value { width: 30px; text-align: right; font-size: 0.75rem; font-weight: 700; color: #334155; }
+
+    /* --- SYSTEM STATUS PULSE --- */
+    .status-indicator {
+        width: 10px; height: 10px; background-color: #10b981;
+        border-radius: 50%; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+        animation: pulse-green 2s infinite;
+    }
+    @keyframes pulse-green {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+        70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    /* --- TYPOGRAPHY & BUTTONS --- */
+    h2.display-6 { font-weight: 700; letter-spacing: -0.02em; }
+    .text-uppercase { letter-spacing: 0.05em; }
+    
+    .btn-primary {
+        background-color: var(--brand-primary);
+        border-color: var(--brand-primary);
+        box-shadow: 0 4px 14px 0 var(--brand-primary-soft);
+    }
+    .btn-primary:hover {
+        background-color: var(--brand-primary);
+        border-color: var(--brand-primary);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px 0 var(--brand-primary-soft);
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container py-5">
+<div class="container-fluid px-4 py-5">
     
-    <div class="row align-items-end mb-5">
-        <div class="col-md-8">
-            <h6 class="text-uppercase text-muted fw-bold small letter-spacing-1 mb-1">System Administration</h6>
-            <h2 class="fw-bold text-dark mb-0 display-6">Overview & Configuration</h2>
+    <div class="d-flex justify-content-between align-items-end mb-5">
+        <div>
+            <h6 class="text-uppercase text-muted fw-bold small mb-1">System Administration</h6>
+            <h2 class="text-dark display-6 mb-0">
+                {% if config.org_type == 'Corporate' %}Corporate Overview{% else %}Campus Overview{% endif %}
+            </h2>
         </div>
-        <div class="col-md-4 text-md-end">
-             <div class="d-inline-flex align-items-center bg-white border px-3 py-2 rounded-pill shadow-sm">
-                <div class="rounded-circle me-2 blink-animation" style="width: 8px; height: 8px; background-color: var(--success, #10b981);"></div>
-                <span class="small fw-bold text-muted">System Online</span>
+        <div class="d-flex align-items-center bg-white px-4 py-2 rounded-pill shadow-sm border border-light">
+            <div class="status-indicator me-3"></div>
+            <div class="d-flex flex-column">
+                <span class="small fw-bold text-dark lh-1">System Online</span>
+                <span class="extra-small text-muted" style="font-size: 0.7rem;">v2.4.0 Stable</span>
             </div>
         </div>
     </div>
 
     <div class="row g-4 mb-5">
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm rounded-4 h-100 transition-hover">
-                <div class="card-body p-4 d-flex align-items-center">
-                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 56px; height: 56px;">
-                        <i class="fas fa-star fa-lg"></i>
-                    </div>
+        
+        <div class="col-xl-4 col-md-6">
+            <div class="card h-100 p-4">
+                <div class="d-flex justify-content-between align-items-start mb-4">
                     <div>
-                        <h6 class="text-muted text-uppercase small fw-bold mb-1">Avg Feedback</h6>
-                        <h3 class="fw-bold mb-0 text-dark">{{ avg_rating|floatformat:1|default:"0.0" }}<span class="text-muted fs-6 ms-1">/ 5</span></h3>
-                        <small class="text-muted">{{ total_feedback }} responses</small>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-1">Avg Satisfaction</h6>
+                        <h3 class="fw-bold mb-0 text-dark display-5">{{ avg_rating|floatformat:1 }}</h3>
+                        <span class="text-muted small">Based on {{ total_feedback }} reviews</span>
+                    </div>
+                    <div class="icon-box" style="background-color: var(--brand-accent-soft); color: var(--brand-accent);">
+                        <i class="fas fa-star"></i>
+                    </div>
+                </div>
+                <div class="mt-auto">
+                    <div class="d-flex justify-content-between small fw-bold mb-2 text-muted">
+                        <span>Score Distribution</span>
+                        <span>{{ avg_rating|floatformat:1 }} / 5.0</span>
+                    </div>
+                    <div class="progress" style="height: 8px; border-radius: 20px; background-color: #f1f5f9;">
+                        <div class="progress-bar" role="progressbar" 
+                             style="width: {% widthratio avg_rating 5 100 %}%; background-color: var(--brand-accent); border-radius: 20px;" 
+                             aria-valuenow="75" aria-valuemin="0" aria-valuemax="100"></div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm rounded-4 h-100 transition-hover">
-                <div class="card-body p-4 d-flex align-items-center">
-                    <div class="bg-info bg-opacity-10 text-info rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 56px; height: 56px;">
-                        <i class="fas fa-user-tie fa-lg"></i>
-                    </div>
+        <div class="col-xl-4 col-md-6">
+            <div class="card h-100 p-4">
+                <div class="d-flex justify-content-between align-items-start mb-4">
                     <div>
-                        <h6 class="text-muted text-uppercase small fw-bold mb-1">Guest Lectures</h6>
-                        <h3 class="fw-bold mb-0 text-dark">{{ guest_avg|floatformat:1|default:"0.0" }}<span class="text-muted fs-6 ms-1">/ 5</span></h3>
-                        <small class="text-muted">{{ guest_feedback_count }} rated sessions</small>
+                        <h6 class="text-muted text-uppercase small fw-bold mb-1">Most Popular Space</h6>
+                        {% if most_booked_room %}
+                            <h3 class="fw-bold mb-0 text-dark">
+                                {% if config.org_type == 'Corporate' %}Space{% else %}Room{% endif %} {{ most_booked_room.number }}
+                            </h3>
+                            <span class="text-muted small">{{ most_booked_room.count }} total bookings</span>
+                        {% else %}
+                            <h3 class="fw-bold mb-0 text-dark">-</h3>
+                            <span class="text-muted small">No data yet</span>
+                        {% endif %}
+                    </div>
+                    <div class="icon-box" style="background-color: var(--brand-primary-soft); color: var(--brand-primary);">
+                        <i class="fas fa-trophy"></i>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm rounded-4 h-100 bg-dark text-white transition-hover">
-                <div class="card-body p-4">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <div>
-                            <h6 class="text-white-50 text-uppercase small fw-bold mb-1">Configuration</h6>
-                            <h3 class="fw-bold mb-0">{{ classrooms.count }} <span class="fs-6 fw-normal text-white-50">Active Rooms</span></h3>
+                <div class="mt-auto">
+                    <div class="p-3 rounded-3 border-0" style="background-color: var(--brand-secondary);">
+                        <div class="d-flex align-items-center mb-1">
+                            <i class="fas fa-chart-line me-2 text-muted small"></i>
+                            <span class="small fw-bold text-dark">Utilization Rate</span>
                         </div>
-                        <i class="fas fa-server text-white-50 fa-lg"></i>
+                        <p class="mb-0 small text-muted lh-sm">
+                            This room accounts for <strong class="text-dark">{{ most_booked_room.percent|default:"0" }}%</strong> of all traffic this month.
+                        </p>
                     </div>
-                    <div class="progress bg-white bg-opacity-10 mt-3" style="height: 4px;">
-                        <div class="progress-bar bg-success" style="width: {{ classrooms.count }}%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-4 col-md-12">
+            <div class="card h-100 p-4 text-white position-relative overflow-hidden" 
+                 style="background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent)); border: none;">
+                
+                <div class="position-absolute top-0 end-0 rounded-circle bg-white opacity-10" 
+                     style="width: 150px; height: 150px; margin-top: -30px; margin-right: -30px;"></div>
+                <div class="position-absolute bottom-0 start-0 rounded-circle bg-white opacity-10" 
+                     style="width: 100px; height: 100px; margin-bottom: -40px; margin-left: -20px;"></div>
+
+                <div class="position-relative z-1 d-flex flex-column h-100">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="text-white-50 text-uppercase small fw-bold mb-1">Total Resources</h6>
+                            <h3 class="fw-bold mb-0">{{ classrooms.count }} Active</h3>
+                        </div>
+                        <i class="fas fa-server fa-2x text-white-50"></i>
                     </div>
-                    <small class="text-white-50 mt-2 d-block">Global Limit: {{ config.classroom_limit }} rooms</small>
+                    
+                    <div class="mt-auto pt-4">
+                        <div class="d-flex justify-content-between small text-white-50 mb-1">
+                            <span>System Capacity</span>
+                            <span>{{ classrooms.count }} / {{ config.classroom_limit }}</span>
+                        </div>
+                        <div class="progress" style="height: 6px; background-color: rgba(255,255,255,0.2); border-radius: 10px;">
+                            <div class="progress-bar bg-white" style="width: {% widthratio classrooms.count config.classroom_limit 100 %}%; border-radius: 10px;"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row g-4 mb-4">
+    <div class="row g-4">
         
-        <div class="col-xl-4 col-lg-5 order-lg-2">
+        <div class="col-lg-4 order-lg-2">
             
-            <div class="card border-0 shadow-sm rounded-4 mb-4">
-                <div class="card-header bg-white border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
-                    <h6 class="fw-bold mb-0">System Identity</h6>
-                    <span class="badge bg-light text-dark border">Theme</span>
+            <div class="card mb-4">
+                <div class="card-header bg-white border-0 pt-4 px-4 pb-0 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0 text-dark">Peak Booking Times</h6>
+                    <span class="badge bg-light text-dark border fw-normal">Heatmap</span>
                 </div>
-                <div class="card-body px-4">
-                    <p class="text-muted small mb-3">Customize the portal logo and color scheme.</p>
-                    
-                    <div class="d-flex align-items-center justify-content-center p-3 rounded-3 mb-3 border border-dashed bg-light">
-                        <button class="btn btn-sm text-white fw-bold shadow-sm pe-none" style="background-color: var(--primary);">
-                            Preview Button
-                        </button>
-                    </div>
-
-                    <button class="btn btn-outline-dark w-100 rounded-pill fw-bold" data-bs-toggle="modal" data-bs-target="#brandingModal">
-                        <i class="fas fa-paint-brush me-2"></i>Edit Branding
-                    </button>
-                </div>
-            </div>
-
-            <div class="card border-0 shadow-sm rounded-4">
-                <div class="card-header bg-white border-bottom-0 pt-4 px-4 pb-2">
-                    <h6 class="fw-bold mb-0">Highest Rated Sessions</h6>
-                </div>
-                <div class="card-body p-0">
-                    {% if top_lectures %}
-                        <div class="list-group list-group-flush">
-                            {% for booking in top_lectures %}
-                                <div class="list-group-item border-0 px-4 py-3 d-flex align-items-center">
-                                    <div class="fw-bold text-muted me-3 fs-5 opacity-50">0{{ forloop.counter }}</div>
-                                    <div class="flex-grow-1">
-                                        <h6 class="fw-bold text-dark mb-0 text-truncate" style="max-width: 180px;">{{ booking.subject }}</h6>
-                                        <small class="text-muted">{{ booking.faculty_name }}</small>
-                                    </div>
-                                    <span class="badge bg-success bg-opacity-10 text-success rounded-pill">
-                                        {{ booking.avg_rating|floatformat:1 }} <i class="fas fa-star ms-1 small"></i>
-                                    </span>
+                <div class="card-body px-4 pb-4">
+                    {% if slot_data %}
+                        <div class="mt-3">
+                            {% for slot in slot_data %}
+                            <div class="bar-chart-row">
+                                <div class="bar-label" title="{{ slot.slot }}">{{ slot.slot }}</div>
+                                <div class="bar-track">
+                                    <div class="bar-fill" style="width: {{ slot.percent }}%;"></div>
                                 </div>
+                                <div class="bar-value">{{ slot.count }}</div>
+                            </div>
                             {% endfor %}
                         </div>
                     {% else %}
-                        <div class="text-center py-5 text-muted">
-                            <p class="mb-0 small">No rating data available.</p>
+                        <div class="text-center py-5 text-muted small">
+                            <i class="far fa-clock fa-2x mb-2 opacity-50"></i><br>
+                            No timing data available yet.
                         </div>
                     {% endif %}
                 </div>
             </div>
+
+            <div class="card">
+                <div class="card-header bg-white border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0 text-dark">System Identity</h6>
+                    <button class="btn btn-sm btn-light border rounded-pill px-3 fw-bold text-muted" data-bs-toggle="modal" data-bs-target="#brandingModal">
+                        <i class="fas fa-cog me-1"></i> Configure
+                    </button>
+                </div>
+                <div class="card-body px-4 pb-4">
+                    <div class="d-flex align-items-center p-3 rounded-3 border bg-light mb-3">
+                        <div class="me-3">
+                            {% if config.site_logo %}
+                                <img src="{{ config.site_logo.url }}" class="rounded-circle shadow-sm" style="width: 48px; height: 48px; object-fit: cover;">
+                            {% else %}
+                                <div class="bg-white border rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                                    <i class="fas fa-image text-muted"></i>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <div class="fw-bold text-dark">{{ config.site_name }}</div>
+                            <div class="small text-muted">{{ config.get_org_type_display }}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <div class="flex-grow-1 p-2 rounded border text-center bg-white">
+                            <div class="rounded-circle mx-auto mb-1 shadow-sm" style="width: 24px; height: 24px; background: var(--brand-primary);"></div>
+                            <small class="text-muted extra-small fw-bold">Primary</small>
+                        </div>
+                        <div class="flex-grow-1 p-2 rounded border text-center bg-white">
+                            <div class="rounded-circle mx-auto mb-1 shadow-sm border" style="width: 24px; height: 24px; background: var(--brand-secondary);"></div>
+                            <small class="text-muted extra-small fw-bold">BG</small>
+                        </div>
+                        <div class="flex-grow-1 p-2 rounded border text-center bg-white">
+                            <div class="rounded-circle mx-auto mb-1 shadow-sm" style="width: 24px; height: 24px; background: var(--brand-accent);"></div>
+                            <small class="text-muted extra-small fw-bold">Accent</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
-        <div class="col-xl-8 col-lg-7 order-lg-1">
-            <div class="card border-0 shadow-sm rounded-4 h-100">
-                <div class="card-header bg-white border-bottom-0 pt-4 px-4 pb-0 d-flex justify-content-between align-items-center">
-                    <h5 class="fw-bold mb-0">Classrooms</h5>
-                    <a href="{% url 'classroom:add_classroom' %}" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold shadow-sm">
-                        <i class="fas fa-plus me-1"></i> Add Room
+        <div class="col-lg-8 order-lg-1">
+            
+            <div class="card mb-4">
+                <div class="card-header bg-white border-0 pt-4 px-4 pb-0 d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold mb-0 text-dark">
+                        {% if config.org_type == 'Corporate' %}Meeting Spaces{% else %}Classrooms{% endif %}
+                    </h5>
+                    <a href="{% url 'classroom:add_classroom' %}" class="btn btn-dark btn-sm rounded-pill px-3 fw-bold shadow-sm">
+                        <i class="fas fa-plus me-1"></i> Add New
                     </a>
                 </div>
-                <div class="card-body p-4">
+                <div class="card-body p-0 mt-3">
                     <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="bg-light rounded-3">
+                        <table class="table table-hover align-middle mb-0" style="margin-bottom: 0;">
+                            <thead class="bg-light">
                                 <tr>
-                                    <th class="ps-3 border-0 text-muted small fw-bold rounded-start">Room</th>
-                                    <th class="border-0 text-muted small fw-bold">Capacity</th>
-                                    <th class="border-0 text-muted small fw-bold">Facilities</th>
-                                    <th class="text-end pe-3 border-0 text-muted small fw-bold rounded-end">Actions</th>
+                                    <th class="ps-4 py-3 text-muted small fw-bold border-0 text-uppercase">Name</th>
+                                    <th class="py-3 text-muted small fw-bold border-0 text-uppercase">Capacity</th>
+                                    <th class="py-3 text-muted small fw-bold border-0 text-uppercase">Amenities</th>
+                                    <th class="text-end pe-4 py-3 text-muted small fw-bold border-0 text-uppercase">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for classroom in classrooms %}
-                                    <tr>
-                                        <td class="ps-3 fw-bold text-dark">
-                                            <div class="d-flex align-items-center">
-                                                <div class="bg-light rounded-circle p-2 me-2 text-center" style="width: 32px; height: 32px;">
-                                                    <i class="fas fa-door-open text-muted small"></i>
-                                                </div>
-                                                R{{ classroom.room_number }}
+                                <tr>
+                                    <td class="ps-4">
+                                        <div class="d-flex align-items-center">
+                                            <div class="icon-box me-3 bg-light text-muted" style="width: 36px; height: 36px; border-radius: 10px; font-size: 0.9rem;">
+                                                <i class="fas fa-door-closed"></i>
                                             </div>
-                                        </td>
-                                        <td class="text-muted">{{ classroom.capacity }}</td>
-                                        <td>
-                                            {% if classroom.has_smartboard %}
-                                                <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 rounded-pill fw-normal px-2">
-                                                    <i class="fas fa-tv me-1"></i>Smartboard
-                                                </span>
-                                            {% else %}
-                                                <span class="text-muted small opacity-50">-</span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-end pe-3">
-                                            <a href="{% url 'classroom:delete_classroom' classroom.id %}" 
-                                               class="btn btn-icon btn-light text-danger btn-sm rounded-circle"
-                                               onclick="return confirm('Permanently delete Room {{ classroom.room_number }}?')"
-                                               title="Delete Room">
-                                                <i class="fas fa-trash-alt"></i>
-                                            </a>
-                                        </td>
-                                    </tr>
+                                            <span class="fw-bold text-dark">
+                                                {% if config.org_type == 'Corporate' %}Space{% else %}Room{% endif %} {{ classroom.room_number }}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td class="text-muted small fw-semibold">{{ classroom.capacity }} Seats</td>
+                                    <td>
+                                        {% if classroom.has_smartboard %}
+                                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 rounded-pill fw-normal px-3 py-2">
+                                                <i class="fas fa-tv me-1"></i>
+                                                {% if config.org_type == 'Corporate' %}Conference TV{% else %}Smartboard{% endif %}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted small opacity-50">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <a href="{% url 'classroom:delete_classroom' classroom.id %}" 
+                                           class="btn btn-light btn-sm text-danger border hover-shadow rounded-circle"
+                                           style="width: 32px; height: 32px; padding: 0; line-height: 30px;"
+                                           onclick="return confirm('Permanently delete {{ classroom.room_number }}?')"
+                                           title="Delete">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </a>
+                                    </td>
+                                </tr>
                                 {% empty %}
-                                    <tr>
-                                        <td colspan="4" class="text-center py-5 text-muted">
-                                            <i class="fas fa-chalkboard fa-2x mb-3 opacity-25"></i>
-                                            <p class="mb-0">No classrooms configured.</p>
-                                        </td>
-                                    </tr>
+                                <tr>
+                                    <td colspan="4" class="text-center py-5 text-muted">
+                                        <div class="d-flex flex-column align-items-center">
+                                            <div class="bg-light rounded-circle p-3 mb-2">
+                                                <i class="fas fa-chalkboard fa-2x opacity-25"></i>
+                                            </div>
+                                            <p class="mb-0 small fw-bold">No spaces configured.</p>
+                                            <p class="small opacity-50">Click "Add New" to get started.</p>
+                                        </div>
+                                    </td>
+                                </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <div class="card border-0 shadow-sm rounded-4 mt-2 overflow-hidden">
-        <div class="card-header bg-white border-bottom pt-4 px-4 pb-3">
-            <h5 class="fw-bold mb-0">System Activity Log</h5>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="bg-light">
-                        <tr>
-                            <th class="ps-4 py-3 text-muted small fw-bold border-0">Date</th>
-                            <th class="py-3 text-muted small fw-bold border-0">Time</th>
-                            <th class="py-3 text-muted small fw-bold border-0">Event</th>
-                            <th class="py-3 text-muted small fw-bold border-0">Faculty</th>
-                            <th class="py-3 text-muted small fw-bold border-0">Room</th>
-                            <th class="py-3 text-muted small fw-bold border-0">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for booking in all_bookings %}
-                            <tr>
-                                <td class="ps-4 fw-bold text-dark">{{ booking.booking_date|date:"M d, Y" }}</td>
-                                <td class="text-muted small">{{ booking.slot }}</td>
-                                <td>
-                                    <div class="fw-bold text-dark small text-truncate" style="max-width: 200px;">{{ booking.subject }}</div>
-                                    {% if booking.is_guest_lecture %}
-                                        <span class="badge bg-warning text-dark border border-warning text-uppercase" style="font-size: 0.6rem;">Guest Event</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="avatar-sm bg-secondary text-white rounded-circle me-2 small fw-bold d-flex align-items-center justify-content-center" style="width: 24px; height: 24px;">
-                                            {{ booking.faculty_name|first }}
+            <div class="card">
+                <div class="card-header bg-white border-0 pt-4 px-4 pb-0">
+                    <h5 class="fw-bold mb-0 text-dark">Recent Activity</h5>
+                </div>
+                <div class="card-body p-0 mt-3">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th class="ps-4 py-3 text-muted small fw-bold border-0 text-uppercase">Date</th>
+                                    <th class="py-3 text-muted small fw-bold border-0 text-uppercase">Event</th>
+                                    <th class="py-3 text-muted small fw-bold border-0 text-uppercase">
+                                        {% if config.org_type == 'Corporate' %}Organizer{% else %}Faculty{% endif %}
+                                    </th>
+                                    <th class="py-3 text-muted small fw-bold border-0 text-uppercase">Loc</th>
+                                    <th class="py-3 text-muted small fw-bold border-0 text-uppercase">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for booking in all_bookings|slice:":8" %}
+                                <tr>
+                                    <td class="ps-4">
+                                        <div class="d-flex flex-column">
+                                            <span class="fw-bold text-dark small">{{ booking.booking_date|date:"M d" }}</span>
+                                            <span class="text-muted extra-small">{{ booking.booking_date|date:"Y" }}</span>
                                         </div>
-                                        <span class="text-muted small">{{ booking.faculty_name }}</span>
-                                    </div>
-                                </td>
-                                <td><span class="badge bg-white text-dark border shadow-sm">R{{ booking.classroom.room_number }}</span></td>
-                                <td>
-                                    {% if booking.status == 'Confirmed' %}
-                                        <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-2">Active</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary bg-opacity-10 text-secondary rounded-pill px-2">{{ booking.status }}</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% empty %}
-                            <tr>
-                                <td colspan="6" class="text-center py-5 text-muted">
-                                    No booking activity found.
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold text-dark small text-truncate" style="max-width: 180px;">
+                                            {{ booking.subject|default:booking.lecture_title }}
+                                        </div>
+                                        <div class="text-muted extra-small">{{ booking.slot }}</div>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center small me-2" style="width: 24px; height: 24px; font-size: 0.7rem;">
+                                                {{ booking.faculty_name|first }}
+                                            </div>
+                                            <span class="text-muted small">{{ booking.faculty_name }}</span>
+                                        </div>
+                                    </td>
+                                    <td><span class="badge bg-light text-dark border shadow-sm fw-normal">R{{ booking.classroom.room_number }}</span></td>
+                                    <td>
+                                        {% if booking.status == 'Confirmed' %}
+                                            <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-2 border border-success border-opacity-25 fw-normal">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary bg-opacity-10 text-secondary rounded-pill px-2 border border-secondary border-opacity-25 fw-normal">{{ booking.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="5" class="text-center py-5 text-muted small">No recent activity.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
+
         </div>
     </div>
-
 </div>
 
 <div class="modal fade" id="brandingModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg rounded-4">
-            <div class="modal-header border-0 pb-0 px-4 pt-4">
-                <h5 class="modal-title fw-bold">Customize Interface</h5>
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header border-0 pb-0 px-4 pt-4 bg-white">
+                <h5 class="modal-title fw-bold text-dark">Customize Interface</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-4">
+            <div class="modal-body p-4 bg-white">
                 <form method="post" enctype="multipart/form-data">
                     {% csrf_token %}
                     <input type="hidden" name="update_branding" value="1">
                     
+                    <div class="mb-4 bg-light p-3 rounded-3 border">
+                        <label class="form-label small fw-bold text-uppercase text-muted letter-spacing-1">Organization Type</label>
+                        {{ branding_form.org_type|as_crispy_field }}
+                    </div>
+
+                    <h6 class="small fw-bold text-muted mb-3 border-bottom pb-2">Visual Identity</h6>
                     <div class="mb-3">
-                        <label class="form-label small fw-bold">Site Name</label>
-                        {{ branding_form.site_name }}
+                        {{ branding_form.site_name|as_crispy_field }}
+                    </div>
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-4">
+                            <label class="form-label small fw-bold">Primary</label>
+                            {{ branding_form.primary_color }}
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small fw-bold">Secondary</label>
+                            {{ branding_form.secondary_color }}
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small fw-bold">Accent</label>
+                            {{ branding_form.accent_color }}
+                        </div>
                     </div>
                     
                     <div class="row g-3 mb-3">
                         <div class="col-6">
-                            <label class="form-label small fw-bold">Primary</label>
-                            {{ branding_form.primary_color }}
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label small fw-bold">Accent (Optional)</label>
-                            {{ branding_form.accent_color }}
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label small fw-bold">Background</label>
-                            {{ branding_form.secondary_color }}
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label small fw-bold">Navbar</label>
-                            {{ branding_form.navbar_color }}
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label small fw-bold">Sidebar/Cards</label>
+                            <label class="form-label small fw-bold">Sidebar BG</label>
                             {{ branding_form.sidebar_color }}
                         </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Navbar BG</label>
+                            {{ branding_form.navbar_color }}
+                        </div>
                     </div>
-
+                    
                     <div class="mb-4">
-                        <label class="form-label small fw-bold">Logo</label>
+                        <label class="form-label small fw-bold">Dashboard Logo</label>
                         {{ branding_form.site_logo }}
                     </div>
 
-                    <hr class="border-light">
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold text-danger">Confirm Password</label>
+                    <div class="p-3 bg-danger bg-opacity-10 rounded-3 border border-danger border-opacity-25 mb-3">
+                        <label class="form-label small fw-bold text-danger">Confirm Admin Password</label>
                         {{ branding_form.confirm_password }}
-                        <div class="form-text small">Enter your admin password to apply changes.</div>
+                        <div class="form-text extra-small text-danger opacity-75">Required to save changes.</div>
                     </div>
 
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-primary rounded-pill fw-bold">Save Changes</button>
+                        <button type="submit" class="btn btn-primary py-2 fw-bold shadow-sm rounded-pill">Save Changes</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 </div>
-
-<style>
-    .transition-hover:hover { transform: translateY(-3px); transition: transform 0.2s ease; }
-    .blink-animation { animation: blink 2s infinite; }
-    @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-    .btn-icon:hover { background-color: #fee2e2 !important; color: #dc2626 !important; }
-</style>
 {% endblock %}

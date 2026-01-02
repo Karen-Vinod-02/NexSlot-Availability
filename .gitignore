@@ -22,7 +22,7 @@ media/
 *.swp
 *.swo
 *.swn
-
+chroma_db_general/
 .DS_Store
 Thumbs.db
 

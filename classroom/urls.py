@@ -28,4 +28,8 @@ urlpatterns = [
     path('ajax/load-subjects/', views.load_subjects, name='ajax_load_subjects'),
     path('ajax/load-semesters/', views.load_semesters, name='ajax_load_semesters'),
     path('ajax/load-divisions/', views.load_divisions, name='ajax_load_divisions'),
+
+    # Chatbot
+    path('api/chat/', views.chat_api, name='chat_api'),
+    path('api/download/<str:filename>/', views.download_pdf, name='download_pdf'),
 ]

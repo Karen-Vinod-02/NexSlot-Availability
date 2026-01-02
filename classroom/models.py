@@ -8,7 +8,7 @@ class User(AbstractUser):
     ROLE_CHOICES = [
         ('Admin', 'Administrator'),
         ('Faculty', 'Faculty'),
-        ('Student', 'Student'),
+        ('Student', 'Student'), # In Corporate mode, Student = Employee
     ]
     
     # Override email to be unique for login
@@ -18,25 +18,22 @@ class User(AbstractUser):
     year = models.CharField(max_length=50, blank=True, null=True)
     division = models.CharField(max_length=50, blank=True, null=True)
     
-    # Set Email as the login field
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username'] # Username is still required by Django internals
+    REQUIRED_FIELDS = ['username']
 
     class Meta:
         db_table = 'users'
 
-# --- NEW: VERIFICATION DATABASE ---
 class AuthorizedEmail(models.Model):
     """
-    This table maps emails to their pre-defined details.
-    Users can only register/login if their email is in this table.
+    Verification table: Users can only register if their email exists here.
     """
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=20, choices=User.ROLE_CHOICES)
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     
-    # Student specific fields (nullable for Faculty)
+    # Student/Employee specific fields
     department = models.CharField(max_length=255, blank=True, null=True)
     year = models.CharField(max_length=50, blank=True, null=True)
     division = models.CharField(max_length=50, blank=True, null=True)
@@ -63,15 +60,15 @@ class Classroom(models.Model):
 class Subject(models.Model):
     name = models.CharField(max_length=255)
     department = models.CharField(max_length=255)
-    year = models.CharField(max_length=50)     # e.g., SE, TE, BE
-    semester = models.CharField(max_length=50) # e.g., Sem 3, Sem 4
+    year = models.CharField(max_length=50)     
+    semester = models.CharField(max_length=50) 
     
     class Meta:
         db_table = 'subjects'
         ordering = ['name']
     
     def __str__(self):
-        return f"{self.name} ({self.department} - {self.year})"
+        return f"{self.name} ({self.department})"
 
 class Booking(models.Model):
     STATUS_CHOICES = [
@@ -85,16 +82,15 @@ class Booking(models.Model):
     booking_date = models.DateField()
     slot = models.CharField(max_length=50)
     
-    # Lecture Details
+    # Details
     subject = models.CharField(max_length=255, blank=True, null=True)
     faculty_name = models.CharField(max_length=255)
-    
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Confirmed')
     
-    # Type of Lecture
+    # Type of Lecture/Meeting
     is_guest_lecture = models.BooleanField(default=False)
     lecture_title = models.CharField(max_length=255, blank=True, null=True)
-    guest_speaker = models.CharField(max_length=100, blank=True, null=True)  # <-- Added Field
+    guest_speaker = models.CharField(max_length=100, blank=True, null=True)
     
     # Target Audience
     department = models.CharField(max_length=255, blank=True, null=True)
@@ -113,26 +109,26 @@ class Booking(models.Model):
         return f"{self.subject or self.lecture_title} - {self.booking_date}"
     
     def is_past_or_ongoing(self):
-        """Check if lecture is active or finished to enable feedback"""
         now = timezone.localtime()
         lecture_date = self.booking_date
         
         if lecture_date < now.date():
-            return True # Past date
+            return True
         elif lecture_date == now.date():
-            # Parse slot time "8:00 - 9:30" -> get start time
             try:
                 start_str = self.slot.split(' - ')[0]
                 start_time = datetime.strptime(start_str, "%H:%M").time()
-                return now.time() >= start_time # Active if start time passed
+                # 12-hour adjustment for typical working hours (1-6 PM treated as 13:00-18:00)
+                if 1 <= start_time.hour <= 6:
+                     start_time = start_time.replace(hour=start_time.hour + 12)
+                return now.time() >= start_time
             except:
                 return False
         return False
 
     def get_average_rating(self):
         feedbacks = self.feedbacks.all()
-        if not feedbacks:
-            return None
+        if not feedbacks: return None
         return sum(f.rating for f in feedbacks) / len(feedbacks)
 
 class Feedback(models.Model):
@@ -147,37 +143,51 @@ class Feedback(models.Model):
         unique_together = ['booking', 'student']
         ordering = ['-created_at']
 
+class Document(models.Model):
+    """
+    Stores uploaded files for RAG processing (Chatbot knowledge base).
+    """
+    file = models.FileField(upload_to='data/')  # Saves to /media/data/ or project_root/data/
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    processed = models.BooleanField(default=False)
+    
+    class Meta:
+        db_table = 'documents'
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return self.file.name
+
 class SystemConfig(models.Model):
     # Functional Config
     class_slots = models.JSONField(default=list)
     classroom_limit = models.IntegerField(default=100)
     updated_at = models.DateTimeField(auto_now=True)
     
-    # --- BRANDING / CUSTOMIZATION ---
-    site_name = models.CharField(max_length=50, default="Classroom", help_text="The name displayed in the navbar")
-    
-    # --- FIX: Changed to FileField to bypass PIL/Numpy crash ---
-    site_logo = models.FileField(upload_to='branding/', null=True, blank=True, help_text="Transparent PNG recommended")
-    
-    primary_color = models.CharField(max_length=7, default="#2563EB", help_text="Hex code (e.g. #2563EB)")
-    accent_color = models.CharField(max_length=7, default="#F59E0B", blank=True, null=True, help_text="Optional Accent Color")
-    secondary_color = models.CharField(max_length=7, default="#F3F4F6", help_text="Hex code (e.g. #F3F4F6)")
+    # Branding
+    site_name = models.CharField(max_length=50, default="Classroom")
+    site_logo = models.FileField(upload_to='branding/', null=True, blank=True)
+    org_type = models.CharField(max_length=20, default='College', choices=[('College', 'College'), ('Corporate', 'Corporate')])
+
+    # Colors
+    primary_color = models.CharField(max_length=7, default="#2563EB")
+    accent_color = models.CharField(max_length=7, default="#F59E0B", blank=True, null=True)
+    secondary_color = models.CharField(max_length=7, default="#F3F4F6")
+    navbar_color = models.CharField(max_length=7, default="#FFFFFF")
+    sidebar_color = models.CharField(max_length=7, default="#FFFFFF")
 
     class Meta:
         db_table = 'config'
     
     @classmethod
     def get_config(cls):
-        # Ensure only one config row exists (ID=1)
         config, created = cls.objects.get_or_create(pk=1)
-        if created:
-            config.class_slots = [
-                "8:00 - 9:30", "9:40 - 11:10", "11:20 - 12:50", "13:30 - 15:00", "15:10 - 16:40"
-            ]
+        if created or not config.class_slots:
+            # Default slots if created or empty
+            config.class_slots = ["8:00 - 9:30", "9:40 - 11:10", "11:20 - 12:50", "13:30 - 15:00"]
             config.save()
         return config
 
     def save(self, *args, **kwargs):
-        # Force ID to 1 to maintain Singleton pattern
         self.pk = 1
         super().save(*args, **kwargs)

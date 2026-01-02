@@ -1,7 +1,9 @@
 {% extends 'classroom/base.html' %}
 {% load crispy_forms_tags %}
 
-{% block title %}Faculty Workspace{% endblock %}
+{% block title %}
+    {% if config.org_type == 'Corporate' %}Workspace{% else %}Faculty Workspace{% endif %}
+{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -50,7 +52,7 @@
     
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-end mb-5 gap-3">
         <div>
-            <h1 class="fw-bold display-6 mb-1 text-dark">Hello, Dr. {{ user.last_name }}</h1>
+            <h1 class="fw-bold display-6 mb-1 text-dark">Hello, {% if config.org_type == 'Corporate' %}{{ user.first_name }}{% else %}Dr. {{ user.last_name }}{% endif %}</h1>
             <p class="text-muted mb-0">Here is the schedule <span class="fw-bold text-dark">{{ selected_date|date:"l, F jS" }}</span></p>
         </div>
         
@@ -68,7 +70,7 @@
                     <table class="table clean-table mb-0" style="min-width: 800px;">
                         <thead class="bg-light">
                             <tr>
-                                <th style="width: 150px; padding-left: 2rem;">Classroom</th>
+                                <th style="width: 150px; padding-left: 2rem;">{% if config.org_type == 'Corporate' %}Space{% else %}Classroom{% endif %}</th>
                                 {% for slot in config.class_slots %}
                                     <th class="text-center" style="min-width: 140px;">{{ slot }}</th>
                                 {% endfor %}
@@ -81,9 +83,9 @@
                                     <div class="d-flex flex-column justify-content-center h-100">
                                         <div class="fw-bold fs-5 text-dark">{{ row.classroom.room_number }}</div>
                                         <div class="small text-muted">
-                                            {{ row.classroom.capacity }} Seats 
+                                            {{ row.classroom.capacity }} Seats
                                             {% if row.classroom.has_smartboard %}
-                                                <span class="text-success ms-1">• Smart</span>
+                                                <span class="text-success ms-1">• {% if config.org_type == 'Corporate' %}Conference Screen{% else %}Smartboard{% endif %}</span>
                                             {% endif %}
                                         </div>
                                     </div>
@@ -131,9 +133,9 @@
                                                 </div>
                                             {% endif %}
 
-                                            {% if booking.division %}
+                                            {% if booking.year %}
                                                 <span class="badge bg-light text-dark border align-self-start" style="font-size: 0.65rem;">
-                                                    {{ booking.year }} - {{ booking.division }}
+                                                    {{ booking.year }} {% if booking.division and booking.division != 'None' %}- {{ booking.division }}{% endif %}
                                                 </span>
                                             {% endif %}
                                         </div>
@@ -162,16 +164,16 @@
                     <h6 class="fw-bold text-dark mb-3">Filter History</h6>
                     <div class="row g-2">
                         <div class="col-12">
-                            <input type="text" id="filterSubject" class="form-control filter-input rounded-3" placeholder="Search Subject...">
+                            <input type="text" id="filterSubject" class="form-control filter-input rounded-3" placeholder="Search {% if config.org_type == 'Corporate' %}Topic{% else %}Subject{% endif %}...">
                         </div>
                         <div class="col-6">
                             <input type="text" id="filterDept" class="form-control filter-input rounded-3" placeholder="Dept">
                         </div>
                         <div class="col-6">
-                            <input type="text" id="filterYear" class="form-control filter-input rounded-3" placeholder="Year">
+                            <input type="text" id="filterYear" class="form-control filter-input rounded-3" placeholder="{% if config.org_type == 'Corporate' %}Level{% else %}Year{% endif %}">
                         </div>
                         <div class="col-6">
-                            <input type="text" id="filterRoom" class="form-control filter-input rounded-3" placeholder="Room">
+                            <input type="text" id="filterRoom" class="form-control filter-input rounded-3" placeholder="{% if config.org_type == 'Corporate' %}Space{% else %}Room{% endif %}">
                         </div>
                         <div class="col-6">
                             <input type="date" id="filterDate" class="form-control filter-input rounded-3">
@@ -203,7 +205,7 @@
                         <h6 class="fw-bold text-dark mb-1">{{ b.subject|default:b.lecture_title }}</h6>
                         <div class="small text-muted d-flex justify-content-between">
                             <span>{{ b.slot }}</span>
-                            <span>Room {{ b.classroom.room_number }}</span>
+                            <span>{% if config.org_type == 'Corporate' %}Space{% else %}Room{% endif %} {{ b.classroom.room_number }}</span>
                         </div>
                         <div class="small text-muted mt-1">
                             {{ b.department|default:"-" }} • {{ b.year|default:"-" }}
@@ -223,7 +225,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content shadow-lg border-0 rounded-4">
             <div class="modal-header border-0 pb-0 px-4 pt-4">
-                <h5 class="modal-title fw-bold">New Session</h5>
+                <h5 class="modal-title fw-bold">New {% if config.org_type == 'Corporate' %}Meeting{% else %}Lecture{% endif %}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-4">
@@ -236,7 +238,7 @@
 
                     <div class="d-flex gap-4 mb-4 p-3 bg-light rounded-3 border border-dashed">
                         <div>
-                            <span class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">Room</span>
+                            <span class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">{% if config.org_type == 'Corporate' %}Space{% else %}Room{% endif %}</span>
                             <div class="fw-bold text-dark" id="displayRoom"></div>
                         </div>
                         <div>
@@ -248,11 +250,11 @@
                     <div class="segmented-control mb-4">
                         <div class="segment-opt">
                             <input type="radio" name="type_selector" id="reg_opt" checked>
-                            <label for="reg_opt">Class</label>
+                            <label for="reg_opt">{% if config.org_type == 'Corporate' %}Internal{% else %}Class{% endif %}</label>
                         </div>
                         <div class="segment-opt">
                             <input type="radio" name="type_selector" id="guest_opt">
-                            <label for="guest_opt">Guest</label>
+                            <label for="guest_opt">{% if config.org_type == 'Corporate' %}External{% else %}Guest{% endif %}</label>
                         </div>
                     </div>
 
@@ -260,8 +262,13 @@
                         <div class="row g-3">
                             <div class="col-6">{{ form.department|as_crispy_field }}</div>
                             <div class="col-6">{{ form.year|as_crispy_field }}</div>
-                            <div class="col-6">{{ form.semester|as_crispy_field }}</div>
-                            <div class="col-6">{{ form.division|as_crispy_field }}</div>
+                            
+                            {# Hide Semester/Division for Corporate #}
+                            {% if config.org_type != 'Corporate' %}
+                                <div class="col-6">{{ form.semester|as_crispy_field }}</div>
+                                <div class="col-6">{{ form.division|as_crispy_field }}</div>
+                            {% endif %}
+                            
                             <div class="col-12">{{ form.subject|as_crispy_field }}</div>
                         </div>
                     </div>
@@ -272,25 +279,40 @@
                             <div class="col-12">{{ form.guest_speaker|as_crispy_field }}</div>
                             
                             <hr class="text-muted my-2">
-                            <p class="text-muted small mb-0 fw-bold">Target Audience (Optional)</p>
+                            <p class="text-muted small mb-0 fw-bold">{% if config.org_type == 'Corporate' %}Target Attendees{% else %}Target Audience{% endif %} (Optional)</p>
                             
                             <div class="col-6">
                                 <select name="guest_department" class="form-select bg-light border-0">
                                     <option value="">All Depts</option>
-                                    <option value="Computer Engineering">Computer</option>
-                                    <option value="Mechanical Engineering">Mechanical</option>
-                                    <option value="Civil Engineering">Civil</option>
-                                    <option value="Electronics & Telecom (EXTC)">EXTC</option>
-                                    <option value="Chemical Engineering">Chemical</option>
+                                    {% if config.org_type == 'Corporate' %}
+                                        <option value="Engineering">Engineering</option>
+                                        <option value="Marketing">Marketing</option>
+                                        <option value="Sales">Sales</option>
+                                        <option value="HR">HR</option>
+                                        <option value="Finance">Finance</option>
+                                    {% else %}
+                                        <option value="Computer Engineering">Computer</option>
+                                        <option value="Mechanical Engineering">Mechanical</option>
+                                        <option value="Civil Engineering">Civil</option>
+                                        <option value="Electronics & Telecom (EXTC)">EXTC</option>
+                                        <option value="Chemical Engineering">Chemical</option>
+                                    {% endif %}
                                 </select>
                             </div>
                             <div class="col-6">
                                 <select name="guest_year" class="form-select bg-light border-0">
-                                    <option value="">All Years</option>
-                                    <option value="FE">FE</option>
-                                    <option value="SE">SE</option>
-                                    <option value="TE">TE</option>
-                                    <option value="BE">BE</option>
+                                    <option value="">{% if config.org_type == 'Corporate' %}All Levels{% else %}All Years{% endif %}</option>
+                                    {% if config.org_type == 'Corporate' %}
+                                        <option value="Junior">Junior</option>
+                                        <option value="Mid-Level">Mid-Level</option>
+                                        <option value="Senior">Senior</option>
+                                        <option value="Executive">Executive</option>
+                                    {% else %}
+                                        <option value="FE">FE</option>
+                                        <option value="SE">SE</option>
+                                        <option value="TE">TE</option>
+                                        <option value="BE">BE</option>
+                                    {% endif %}
                                 </select>
                             </div>
                         </div>
@@ -306,8 +328,10 @@
 </div>
 
 <script>
+    const orgType = "{{ config.org_type }}";
+
     function openBookingModal(roomId, roomNum, slot) {
-        document.getElementById('displayRoom').innerText = roomNum;
+        document.getElementById('displayRoom').innerText = (orgType === 'Corporate' ? 'Space ' : 'Room ') + roomNum;
         document.getElementById('displaySlot').innerText = slot;
         let roomSelect = document.getElementById('id_classroom');
         roomSelect.innerHTML = '';
@@ -344,10 +368,23 @@
         const url = document.getElementById('bookingForm').dataset.subjectsUrl;
 
         function loadSubjects() {
-            if(dept.value && year.value && sem.value) {
+            // STOP AJAX IF CORPORATE (Subject is text input)
+            if (orgType === 'Corporate') return;
+
+            if(dept.value && year.value) {
+                // If College mode, we might need semester.
+                if (sem && !sem.value && orgType === 'College') {
+                     subj.innerHTML = '<option value="">Select Semester first</option>';
+                     subj.disabled = true;
+                     return;
+                }
+
                 subj.innerHTML = '<option>Loading...</option>';
                 subj.disabled = true;
-                const query = `?department=${encodeURIComponent(dept.value)}&year=${encodeURIComponent(year.value)}&semester=${encodeURIComponent(sem.value)}`;
+                
+                let query = `?department=${encodeURIComponent(dept.value)}&year=${encodeURIComponent(year.value)}`;
+                if(sem && sem.value) query += `&semester=${encodeURIComponent(sem.value)}`;
+
                 fetch(url + query).then(r => r.json()).then(data => {
                     subj.innerHTML = '<option value="">Select Subject...</option>';
                     if(data.length === 0) subj.innerHTML += '<option disabled>No subjects found</option>';
@@ -355,13 +392,14 @@
                     subj.disabled = false;
                 }).catch(e => { subj.innerHTML = '<option>Error loading</option>'; });
             } else {
-                subj.innerHTML = '<option value="">Select Dept, Year & Sem first</option>';
+                subj.innerHTML = '<option value="">Select Dept & {% if config.org_type == 'Corporate' %}Level{% else %}Year{% endif %} first</option>';
                 subj.disabled = true;
             }
         }
-        dept.addEventListener('change', loadSubjects); 
-        year.addEventListener('change', loadSubjects);
-        sem.addEventListener('change', loadSubjects);
+        
+        if(dept) dept.addEventListener('change', loadSubjects); 
+        if(year) year.addEventListener('change', loadSubjects);
+        if(sem) sem.addEventListener('change', loadSubjects);
 
         // Sidebar Filter
         const inputs = ['filterSubject', 'filterDept', 'filterYear', 'filterRoom', 'filterDate'];
