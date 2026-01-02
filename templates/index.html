@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VESIT Academic Assistant</title>
+    <link rel="icon" href="🎓" type="image/x-icon">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+            width: 100%;
+        }
+
+        .logo-container {
+            background: white;
+            padding: 1.5rem 2rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .logo-container img {
+            max-width: 200px;
+            height: auto;
+        }
+
+        .university-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #1a365d;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            font-size: 0.95rem;
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        .portal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin: 2rem 0;
+            flex-wrap: wrap;
+        }
+
+        .portal-btn {
+            background: white;
+            color: #1e293b;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 0.75rem 1.5rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 150px;
+        }
+
+        .portal-btn:hover {
+            border-color: #3b82f6;
+            background: #3b82f6;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59,130,246,0.3);
+        }
+
+        .portal-btn.active {
+            border-color: #3b82f6;
+            background: #3b82f6;
+            color: white;
+        }
+
+        .current-portal {
+            text-align: center;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+            color: #64748b;
+        }
+
+        .current-portal strong {
+            color: #3b82f6;
+        }
+
+        .chat-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: transparent;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem 0;
+            margin-bottom: 1rem;
+            min-height: 400px;
+        }
+
+        .message {
+            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message.user {
+            align-items: flex-end;
+        }
+
+        .message.assistant {
+            align-items: flex-start;
+        }
+
+        .message-content {
+            padding: 0.875rem 1.125rem;
+            border-radius: 18px;
+            max-width: 80%;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+
+        .message.user .message-content {
+            background: #3b82f6;
+            color: white;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #1e293b;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .resources-section {
+            margin-top: 0.75rem;
+            max-width: 80%;
+        }
+
+        .resource-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+        }
+
+        .source-item {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .source-item:hover {
+            border-color: #3b82f6;
+            box-shadow: 0 2px 8px rgba(59,130,246,0.15);
+        }
+
+        .download-btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            text-align: left;
+        }
+
+        .download-btn:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59,130,246,0.3);
+        }
+
+        .input-area {
+            background: white;
+            border-radius: 24px;
+            border: 2px solid #e2e8f0;
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .input-area:focus-within {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+        }
+
+        #messageInput {
+            flex: 1;
+            border: none;
+            outline: none;
+            font-size: 1rem;
+            font-family: inherit;
+        }
+
+        .send-btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 0.5rem 1.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .send-btn:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #64748b;
+            margin: 1rem 0;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #e2e8f0;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .footer {
+            text-align: center;
+            padding: 1rem;
+            color: #94a3b8;
+            font-size: 0.875rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            margin-top: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .university-title {
+                font-size: 1.2rem;
+            }
+
+            .portal-buttons {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .portal-btn {
+                width: 100%;
+            }
+
+            .message-content {
+                max-width: 90%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-container">
+            <img src="/static/logo.png" alt="VESIT Logo" onerror="this.style.display='none'">
+            <div class="university-title">Vivekanand Education Society's Institute of Technology</div>
+            <div class="subtitle">AI-Powered Academic Assistant • Get instant answers from official resources</div>
+        </div>
+
+        <div class="portal-buttons">
+            <button class="portal-btn active" onclick="selectPortal('About VESIT', this)">📚 About VESIT</button>
+            <button class="portal-btn" onclick="selectPortal('Semester 4', this)">📘 Semester 4</button>
+            <button class="portal-btn" onclick="selectPortal('Semester 5', this)">📗 Semester 5</button>
+        </div>
+
+        <div class="current-portal">
+            Currently viewing: <strong id="currentPortal">About VESIT</strong>
+        </div>
+
+        <div class="chat-container">
+            <div class="messages-area" id="messagesArea"></div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <span>Retrieving information...</span>
+            </div>
+
+            <div class="input-area">
+                <input 
+                    type="text" 
+                    id="messageInput" 
+                    placeholder="Ask your academic question..."
+                    onkeypress="handleKeyPress(event)"
+                >
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+
+        <div class="footer">VESIT Academic Assistant • Powered by AI Retrieval System</div>
+    </div>
+
+    <script>
+        let currentPortal = 'About VESIT';
+        const sessionId = 'session_' + Date.now();
+
+        // Load history when page loads
+        window.onload = function() {
+            loadHistory();
+            document.getElementById('messageInput').focus();
+        };
+
+        async function selectPortal(portalName, btnElement) {
+            currentPortal = portalName;
+            document.getElementById('currentPortal').textContent = portalName;
+            
+            // Update button states
+            document.querySelectorAll('.portal-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            btnElement.classList.add('active');
+            
+            // Load history for this portal
+            await loadHistory();
+        }
+
+        async function loadHistory() {
+            try {
+                const response = await fetch(`/api/history?session_id=${sessionId}&portal=${encodeURIComponent(currentPortal)}`);
+                const data = await response.json();
+                
+                // Clear current messages
+                document.getElementById('messagesArea').innerHTML = '';
+                
+                // Display history
+                if (data.history && data.history.length > 0) {
+                    data.history.forEach(item => {
+                        addMessage('user', item.question, [], false);
+                        addMessage('assistant', item.answer, item.sources || [], false);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load history:', error);
+            }
+        }
+
+        function clearChat() {
+            document.getElementById('messagesArea').innerHTML = '';
+            
+            fetch('/api/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    session_id: sessionId,
+                    portal: currentPortal 
+                })
+            });
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const question = input.value.trim();
+            
+            if (!question) return;
+            
+            // Clear input
+            input.value = '';
+            
+            // Disable send button
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = true;
+            
+            // Add user message
+            addMessage('user', question, [], true);
+            
+            // Show loading
+            document.getElementById('loading').classList.add('active');
+            
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question: question,
+                        portal: currentPortal,
+                        session_id: sessionId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    addMessage('assistant', 'Error: ' + data.error, [], true);
+                } else {
+                    addMessage('assistant', data.answer, data.sources || [], true);
+                }
+            } catch (error) {
+                addMessage('assistant', 'Error: Failed to connect to server. Make sure Flask is running on port 5000.', [], true);
+                console.error('Connection error:', error);
+            } finally {
+                // Hide loading
+                document.getElementById('loading').classList.remove('active');
+                sendBtn.disabled = false;
+                input.focus();
+            }
+        }
+
+        function addMessage(type, content, sources = [], shouldScroll = true) {
+            const messagesArea = document.getElementById('messagesArea');
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            
+            messageDiv.appendChild(contentDiv);
+            
+            // Only add sources if they exist and content doesn't indicate no info
+            const noInfoPhrases = [
+                'not available in the official data',
+                'information is not available',
+                'not found in the context',
+                'cannot find',
+                'no information'
+            ];
+            
+            const hasNoInfo = noInfoPhrases.some(phrase => 
+                content.toLowerCase().includes(phrase)
+            );
+            
+            // Add sources only if present AND info was found
+            if (sources && sources.length > 0 && !hasNoInfo) {
+                const resourcesDiv = document.createElement('div');
+                resourcesDiv.className = 'resources-section';
+                
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'resource-title';
+                titleDiv.textContent = '📚 Reference Materials';
+                resourcesDiv.appendChild(titleDiv);
+                
+                sources.forEach(src => {
+                    const sourceDiv = document.createElement('div');
+                    sourceDiv.className = 'source-item';
+                    
+                    if (src.toLowerCase().endsWith('.pdf')) {
+                        const downloadBtn = document.createElement('button');
+                        downloadBtn.className = 'download-btn';
+                        downloadBtn.textContent = `📄 ${src}`;
+                        downloadBtn.onclick = () => downloadPDF(src);
+                        sourceDiv.appendChild(downloadBtn);
+                    } else {
+                        sourceDiv.innerHTML = '🌐 <strong>Source:</strong> Official VESIT Website';
+                    }
+                    
+                    resourcesDiv.appendChild(sourceDiv);
+                });
+                
+                messageDiv.appendChild(resourcesDiv);
+            }
+            
+            messagesArea.appendChild(messageDiv);
+            
+            if (shouldScroll) {
+                messagesArea.scrollTop = messagesArea.scrollHeight;
+            }
+        }
+
+        function downloadPDF(filename) {
+            window.open(`/api/download/${filename}`, '_blank');
+        }
+    </script>
+</body>
+</html>
