@@ -8,14 +8,15 @@ class User(AbstractUser):
     ROLE_CHOICES = [
         ('Admin', 'Administrator'),
         ('Faculty', 'Faculty'),
-        ('Student', 'Student'), # In Corporate mode, Student = Employee
+        ('Student', 'Student'),
+        ('Employee', 'Employee'),
     ]
     
     # Override email to be unique for login
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     department = models.CharField(max_length=255, blank=True, null=True)
-    year = models.CharField(max_length=50, blank=True, null=True)
+    year = models.CharField(max_length=50, blank=True, null=True) # Stores 'Year' (Academic) or 'Level' (Corporate)
     division = models.CharField(max_length=50, blank=True, null=True)
     
     USERNAME_FIELD = 'email'
@@ -58,6 +59,10 @@ class Classroom(models.Model):
         return f"Room {self.room_number}"
 
 class Subject(models.Model):
+    """
+    Used primarily for College mode to populate dropdowns.
+    Corporate mode uses free-text subjects in Booking.
+    """
     name = models.CharField(max_length=255)
     department = models.CharField(max_length=255)
     year = models.CharField(max_length=50)     
@@ -82,7 +87,7 @@ class Booking(models.Model):
     booking_date = models.DateField()
     slot = models.CharField(max_length=50)
     
-    # Details
+    # Details: Supports both Academic Subject (Dropdown) and Corporate Topic (Free Text)
     subject = models.CharField(max_length=255, blank=True, null=True)
     faculty_name = models.CharField(max_length=255)
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Confirmed')
@@ -149,6 +154,7 @@ class Document(models.Model):
     """
     title = models.CharField(max_length=255, blank=True)
     file = models.FileField(upload_to='data/')  # Saves to project_root/data/
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='documents')
     uploaded_at = models.DateTimeField(auto_now_add=True)
     processed = models.BooleanField(default=False)
     
@@ -181,6 +187,11 @@ class SystemConfig(models.Model):
     secondary_color = models.CharField(max_length=7, default="#F3F4F6")
     navbar_color = models.CharField(max_length=7, default="#FFFFFF")
     sidebar_color = models.CharField(max_length=7, default="#FFFFFF")
+
+    # AI Assistant Configuration
+    chatbot_enabled = models.BooleanField(default=True)
+    chatbot_source_url = models.URLField(blank=True, null=True, help_text="External source URL for knowledge base")
+    chatbot_greeting = models.CharField(max_length=255, default="Hello! How can I assist you today?")
 
     class Meta:
         db_table = 'config'

@@ -180,16 +180,17 @@
             <div class="card h-100 p-4 text-white position-relative overflow-hidden" 
                  style="background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent)); border: none;">
                 
-                <div class="position-absolute top-0 end-0 rounded-circle bg-white opacity-10" 
-                     style="width: 150px; height: 150px; margin-top: -30px; margin-right: -30px;"></div>
-                <div class="position-absolute bottom-0 start-0 rounded-circle bg-white opacity-10" 
-                     style="width: 100px; height: 100px; margin-bottom: -40px; margin-left: -20px;"></div>
+                <div class="position-absolute top-0 end-0 rounded-circle bg-white" 
+                     style="width: 180px; height: 180px; margin-top: -60px; margin-right: -60px; opacity: 0.1; z-index: 0;"></div>
+                
+                <div class="position-absolute bottom-0 start-0 rounded-circle bg-white" 
+                     style="width: 120px; height: 120px; margin-bottom: -40px; margin-left: -30px; opacity: 0.1; z-index: 0;"></div>
 
-                <div class="position-relative z-1 d-flex flex-column h-100">
+                <div class="position-relative z-2 d-flex flex-column h-100">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
                             <h6 class="text-white-50 text-uppercase small fw-bold mb-1">Total Resources</h6>
-                            <h3 class="fw-bold mb-0">{{ classrooms.count }} Active</h3>
+                            <h3 class="fw-bold mb-0 text-white">{{ classrooms.count }} Active</h3>
                         </div>
                         <i class="fas fa-server fa-2x text-white-50"></i>
                     </div>
@@ -205,7 +206,7 @@
                     </div>
                 </div>
             </div>
-        </div>
+            </div>
     </div>
 
     <div class="row g-4">
@@ -471,6 +472,34 @@
                     <div class="mb-4">
                         <label class="form-label small fw-bold">Dashboard Logo</label>
                         {{ branding_form.site_logo }}
+                    </div>
+
+                    <h6 class="small fw-bold text-muted mb-3 mt-4 border-bottom pb-2">
+                        <i class="fas fa-robot me-2"></i>AI Assistant Settings
+                    </h6>
+                    
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Knowledge Base Source</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0"><i class="fas fa-link text-muted"></i></span>
+                            {{ branding_form.chatbot_source_url }} 
+                        </div>
+                        <div class="form-text extra-small text-muted">
+                            URL for the bot to learn from (e.g., University Wiki, Corporate Docs).
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Custom Greeting</label>
+                        {{ branding_form.chatbot_greeting }}
+                        <div class="form-text extra-small text-muted">The first message the bot sends to users.</div>
+                    </div>
+
+                    <div class="form-check form-switch mb-4">
+                        {{ branding_form.chatbot_enabled }}
+                        <label class="form-check-label small fw-bold" for="{{ branding_form.chatbot_enabled.id_for_label }}">
+                            Enable AI Assistant for Users
+                        </label>
                     </div>
 
                     <div class="p-3 bg-danger bg-opacity-10 rounded-3 border border-danger border-opacity-25 mb-3">

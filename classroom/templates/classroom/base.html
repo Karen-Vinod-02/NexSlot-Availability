@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}{{ branding.site_name|default:"Classroom Manager" }}{% endblock %}</title>
+    <title>{% block title %}{{ config.site_name|default:"Classroom Manager" }}{% endblock %}</title>
     
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -13,12 +13,12 @@
     <style>
         :root {
             /* --- DYNAMIC THEME ENGINE --- */
-            --primary: {{ branding.primary_color|default:"#2563EB" }};
-            --accent: {{ branding.accent_color|default:"#F59E0B" }}; 
-            --bg-body: {{ branding.secondary_color|default:"#F3F4F6" }};
+            --primary: {{ config.primary_color|default:"#2563EB" }};
+            --accent: {{ config.accent_color|default:"#F59E0B" }}; 
+            --bg-body: {{ config.secondary_color|default:"#F3F4F6" }};
             
             /* Calculated variants */
-            --primary-soft: {{ branding.primary_color|default:"#2563EB" }}15; 
+            --primary-soft: {{ config.primary_color|default:"#2563EB" }}15; 
             --font-main: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             --text-main: #111827;
         }
@@ -251,12 +251,12 @@
     <nav class="navbar navbar-expand-lg fixed-top py-3">
         <div class="container-fluid px-4 px-lg-5">
             <a class="navbar-brand fw-bold text-dark d-flex align-items-center gap-2" href="#">
-                {% if branding.site_logo %}
-                    <img src="{{ branding.site_logo.url }}" alt="Logo" height="32" class="d-inline-block align-text-top rounded-circle">
+                {% if config.site_logo %}
+                    <img src="{{ config.site_logo.url }}" alt="Logo" height="32" class="d-inline-block align-text-top rounded-circle">
                 {% else %}
                     <i class="fas fa-layer-group text-primary"></i>
                 {% endif %}
-                <span>{{ branding.site_name|default:"Classroom" }}</span>
+                <span>{{ config.site_name|default:"Classroom" }}</span>
             </a>
             
             {% if user.is_authenticated %}
@@ -290,7 +290,7 @@
 
     {% block content %}{% endblock %}
 
-    {% if user.is_authenticated %}
+    {% if user.is_authenticated and config.chatbot_enabled %}
     <div id="chat-widget-container">
         
         <div id="chat-window">
@@ -301,14 +301,14 @@
                     </div>
                     <div>
                         <h6 class="mb-0 fw-bold">AI Assistant</h6>
-                        <small class="opacity-75" style="font-size: 0.7rem;">Powered by Ollama</small>
+                        <small class="opacity-75" style="font-size: 0.7rem;">{{ config.site_name }} Support</small>
                     </div>
                 </div>
             </div>
             
             <div id="chat-messages">
                 <div class="message bot">
-                    Hello {{ user.first_name }}! 👋<br>I can help you with questions about VESIT, academic policies, or your schedule.
+                    {{ config.chatbot_greeting|default:"Hello! How can I help you today?"|linebreaksbr }}
                 </div>
                 <div class="typing-indicator" id="typing-indicator">
                     <div class="typing-dots"><span></span><span></span><span></span></div>
@@ -363,7 +363,7 @@
                     const div = document.createElement('div');
                     div.className = `message ${type}`;
                     
-                    let contentHtml = text;
+                    let contentHtml = text.replace(/\n/g, '<br>');
                     
                     if (sources && sources.length > 0) {
                         contentHtml += '<div style="margin-top:8px;">';
@@ -396,7 +396,6 @@
                     scrollToBottom();
 
                     try {
-                        // FIX: URL is now a relative path to Django, not Flask
                         const response = await fetch('/api/chat/', {
                             method: 'POST',
                             headers: { 
@@ -405,7 +404,7 @@
                             },
                             body: JSON.stringify({
                                 question: question,
-                                portal: "About VESIT", // Default context
+                                portal: "General Chat", // Mapped to general DB in views
                                 session_id: "{{ user.id }}"
                             })
                         });

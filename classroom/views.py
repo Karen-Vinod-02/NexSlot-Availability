@@ -1,60 +1,88 @@
 import os
 import re
 import json
+import csv
+import logging
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Q, Avg, Count
-from django.http import JsonResponse, FileResponse, Http404
+from django.http import JsonResponse, FileResponse, Http404, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.utils import timezone
 from datetime import date, datetime
+
+# --- IMPORT MODELS & FORMS ---
 from .models import User, Classroom, Booking, Feedback, SystemConfig, Subject, AuthorizedEmail, Document
-from .forms import UserRegistrationForm, UserLoginForm, ClassroomForm, BookingForm, FeedbackForm, SystemBrandingForm, DocumentUploadForm, get_allowed_divisions, get_allowed_semesters
+from .forms import (
+    UserRegistrationForm, UserLoginForm, ClassroomForm, BookingForm, 
+    FeedbackForm, SystemBrandingForm, DocumentUploadForm, 
+    get_allowed_divisions, get_allowed_semesters
+)
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------
-# AI CHATBOT CONFIGURATION & GLOBALS
+# AI CHATBOT & SCRAPING CONFIGURATION
 # ---------------------------------------------------------
+
+# 1. AI Libraries Check
 try:
     from langchain_chroma import Chroma
     from langchain_ollama import OllamaLLM, OllamaEmbeddings
     from langchain_core.prompts import PromptTemplate
     from langchain_text_splitters import RecursiveCharacterTextSplitter
     from langchain_community.document_loaders import PyPDFLoader, TextLoader
+    from langchain_core.documents import Document as LangChainDocument
     AI_AVAILABLE = True
 except ImportError:
     AI_AVAILABLE = False
-    print("⚠️ AI Libraries not found. Chatbot will be offline.")
+    print("⚠️ AI Libraries (LangChain/Chroma/Ollama) not found. Chatbot will be offline.")
 
-# Global Caches
+# 2. Scraping Libraries Check
+try:
+    import requests
+    from bs4 import BeautifulSoup
+    import urllib3
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    SCRAPING_AVAILABLE = True
+except ImportError:
+    SCRAPING_AVAILABLE = False
+    print("⚠️ Scraping Libraries (BeautifulSoup/Requests) not found. URL ingestion will be skipped.")
+
+# Global Caches for AI
 chat_sessions = {}  
 llm_cache = {}
 embedding_cache = None
 
-PROMPT_TEMPLATE = PromptTemplate(
-    input_variables=["context", "question"],
-    template="""You are the official academic assistant for Vivekanand Education Society's Institute of Technology (VESIT).
+def get_prompt_template(system_name="System"):
+    """
+    Returns a strict prompt template to reduce hallucinations.
+    """
+    return PromptTemplate(
+        input_variables=["context", "question"],
+        template=f"""You are the official AI assistant for {system_name}.
 
-IMPORTANT NOTES:
-- VESIT is the abbreviation for "Vivekanand Education Society's Institute of Technology"
-- Both names refer to the SAME institution
-- VESIT is located in Mumbai, India
-- Answer ONLY using the context provided below
-- If information is not in the context, say "This information is not available in the official data."
-- Be consistent with institution names
+STRICT RULES:
+1. Answer ONLY using the context provided below.
+2. If the answer is NOT in the context, strictly say: "I cannot find this information in the official documents or website provided."
+3. Do not make up information or use outside knowledge.
+4. Be concise and professional.
 
 Context:
-{context}
+{{context}}
 
-Question: {question}
+Question: {{question}}
 
-Answer (brief, clear, and accurate):"""
-)
+Answer:"""
+    )
 
 def get_embeddings():
-    """Load embeddings once and cache globally"""
+    """Load embeddings once and cache globally to save RAM"""
     global embedding_cache
     if embedding_cache is None and AI_AVAILABLE:
         embedding_cache = OllamaEmbeddings(
@@ -64,17 +92,18 @@ def get_embeddings():
     return embedding_cache
 
 def load_system(portal_name):
-    """Load LLM and retriever for a specific portal"""
+    """Load LLM and retriever for a specific knowledge base (portal)"""
     if not AI_AVAILABLE:
         return None, None
 
+    # Return cached if available
     if portal_name in llm_cache:
         return llm_cache[portal_name]
     
     embeddings = get_embeddings()
-    
-    # Map portal to database paths
     base_dir = settings.BASE_DIR
+    
+    # Map "Portals" to specific ChromeDB folders
     db_map = {
         "General Chat": os.path.join(base_dir, "chroma_db_general"),
         "About VESIT": os.path.join(base_dir, "chroma_db_general"),
@@ -82,13 +111,11 @@ def load_system(portal_name):
         "Semester 5": os.path.join(base_dir, "chroma_db_sem5")
     }
     
-    db_path = db_map.get(portal_name)
-    # Default fallback if specific DB doesn't exist yet
-    if not db_path or not os.path.exists(db_path):
-        db_path = os.path.join(base_dir, "chroma_db_general")
+    db_path = db_map.get(portal_name, os.path.join(base_dir, "chroma_db_general"))
     
+    # If DB doesn't exist yet, we can't retrieve
     if not os.path.exists(db_path):
-         return None, None # No DB at all
+         return None, None 
 
     vectorstore = Chroma(
         persist_directory=db_path,
@@ -97,18 +124,17 @@ def load_system(portal_name):
     
     retriever = vectorstore.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": 2}
+        search_kwargs={"k": 3} 
     )
     
     llm = OllamaLLM(
         model="qwen2.5:1.5b",
         base_url="http://localhost:11434",
         temperature=0.1,
-        num_predict=120,
+        num_predict=200,
         num_ctx=2048,
         top_k=20,
-        top_p=0.95,
-        repeat_penalty=1.2
+        top_p=0.95
     )
     
     llm_cache[portal_name] = (llm, retriever)
@@ -117,12 +143,10 @@ def load_system(portal_name):
 def preprocess_question(question):
     """Expand abbreviations and normalize question"""
     replacements = {
-        r'\bVESIT\b': 'Vivekanand Education Society Institute of Technology VESIT',
-        r'\bVES\b': 'Vivekanand Education Society',
+        r'\bVESIT\b': 'Vivekanand Education Society Institute of Technology',
+        r'\bSFIT\b': 'St. Francis Institute of Technology',
         r'\bIOT\b': 'Internet of Things',
         r'\bAI\b': 'Artificial Intelligence',
-        r'\bML\b': 'Machine Learning',
-        r'\bDS\b': 'Data Science',
     }
     processed = question
     for pattern, replacement in replacements.items():
@@ -132,76 +156,193 @@ def preprocess_question(question):
 def post_process_answer(answer):
     return answer.strip()
 
+# --- INGESTION LOGIC (Files & URLs) ---
+
+def _add_texts_to_chroma(texts, metadatas, db_folder="chroma_db_general"):
+    """Helper to save chunks to ChromaDB"""
+    if not AI_AVAILABLE or not texts: 
+        return False
+    
+    try:
+        db_path = os.path.join(settings.BASE_DIR, db_folder)
+        embeddings = get_embeddings()
+        vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
+        vectorstore.add_texts(texts=texts, metadatas=metadatas)
+        logger.info(f"✅ Successfully added {len(texts)} chunks to {db_folder}")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Chroma DB Error: {e}")
+        return False
+
+def clear_general_knowledge_base():
+    """
+    Clear the general knowledge base before ingesting new website content.
+    """
+    if not AI_AVAILABLE:
+        return False
+    
+    try:
+        db_path = os.path.join(settings.BASE_DIR, "chroma_db_general")
+        
+        # Delete the entire database directory
+        if os.path.exists(db_path):
+            import shutil
+            shutil.rmtree(db_path)
+            logger.info(f"🗑️ Cleared general knowledge base at {db_path}")
+        
+        # Clear cache
+        if "General Chat" in llm_cache:
+            del llm_cache["General Chat"]
+        if "About VESIT" in llm_cache:
+            del llm_cache["About VESIT"]
+        
+        return True
+    except Exception as e:
+        logger.error(f"❌ Error clearing knowledge base: {e}")
+        return False
+
+def ingest_website(url, clear_existing=True):
+    """
+    Heavy-duty scraper using Session, Retries, and Browser Masquerading.
+    """
+    if not AI_AVAILABLE:
+        logger.warning("⚠️ Skipping scrape: AI libraries not available")
+        return False
+    
+    if not SCRAPING_AVAILABLE:
+        logger.warning("⚠️ Skipping scrape: Scraping libraries not available")
+        return False
+
+    try:
+        if clear_existing:
+            logger.info(f"🧹 Clearing existing general knowledge base...")
+            clear_general_knowledge_base()
+        
+        logger.info(f"🕸️ Attempting to scrape: {url}...")
+
+        session = requests.Session()
+        retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+        session.mount('https://', HTTPAdapter(max_retries=retries))
+        session.mount('http://', HTTPAdapter(max_retries=retries))
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+
+        response = session.get(url, headers=headers, timeout=30, verify=False)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        for element in soup(["script", "style", "nav", "footer", "header", "iframe", "noscript", "svg"]):
+            element.decompose()
+        
+        main_content = soup.find('main') or soup.find('article') or soup.find('div', id='content') or soup.body
+        if main_content:
+            text_content = main_content.get_text(separator=' ', strip=True)
+        else:
+            text_content = soup.get_text(separator=' ', strip=True)
+        
+        text_content = re.sub(r'\s+', ' ', text_content).strip()
+        
+        if len(text_content) < 100:
+            logger.warning(f"⚠️ Content too short ({len(text_content)} chars).")
+            return False
+
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        chunks = splitter.split_text(text_content)
+        
+        metadatas = [{"source": url, "title": soup.title.string if soup.title else url, "type": "website"} for _ in chunks]
+        
+        success = _add_texts_to_chroma(chunks, metadatas, "chroma_db_general")
+        
+        if success:
+            if "About VESIT" in llm_cache: del llm_cache["About VESIT"]
+            if "General Chat" in llm_cache: del llm_cache["General Chat"]
+            logger.info("✅ Scrape Successful!")
+        
+        return success
+
+    except Exception as e:
+        logger.error(f"❌ SCRAPE FAILED: {str(e)}")
+        return False
+
 def ingest_document(doc_instance):
-    """
-    Process uploaded PDF/TXT and add to the correct ChromaDB vector store.
-    """
-    if not AI_AVAILABLE: return False
+    """Process uploaded PDF/TXT"""
+    if not AI_AVAILABLE: 
+        return False
 
     try:
         file_path = doc_instance.file.path
         ext = os.path.splitext(file_path)[1].lower()
         
-        # 1. Load Document
-        if ext == '.pdf':
+        if ext == '.pdf': 
             loader = PyPDFLoader(file_path)
-        elif ext == '.txt':
+        elif ext == '.txt': 
             loader = TextLoader(file_path)
-        else:
-            return False # Unsupported format
+        else: 
+            return False
             
         docs = loader.load()
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000, 
+            chunk_overlap=200,
+            separators=["\n\n", "\n", ". ", " ", ""]
+        )
+        chunks_docs = splitter.split_documents(docs)
         
-        # 2. Add Metadata
-        for d in docs:
-            d.metadata['source'] = doc_instance.file.name
-            d.metadata['title'] = doc_instance.title
-            if doc_instance.department: d.metadata['department'] = doc_instance.department
+        texts = [d.page_content for d in chunks_docs]
+        metadatas = [{
+            "source": doc_instance.file.name,
+            "title": doc_instance.title,
+            "department": doc_instance.department or "",
+            "type": "document"
+        } for _ in chunks_docs]
         
-        # 3. Split Text
-        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        chunks = splitter.split_documents(docs)
-        
-        # 4. Determine Target DB based on metadata
-        # Logic: If semester is "Sem 4", go to sem4 db. If "Sem 5", go to sem5. Else General.
-        target_db_folder = "chroma_db_general"
+        target_db = "chroma_db_general"
         portal_key = "About VESIT"
         
         if doc_instance.semester == "Sem 4":
-            target_db_folder = "chroma_db_sem4"
+            target_db = "chroma_db_sem4"
             portal_key = "Semester 4"
         elif doc_instance.semester == "Sem 5":
-            target_db_folder = "chroma_db_sem5"
+            target_db = "chroma_db_sem5"
             portal_key = "Semester 5"
             
-        db_path = os.path.join(settings.BASE_DIR, target_db_folder)
+        success = _add_texts_to_chroma(texts, metadatas, target_db)
         
-        # 5. Ingest into Chroma
-        embeddings = get_embeddings()
-        vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
-        vectorstore.add_documents(chunks)
-        
-        # 6. Invalidate Cache so new data is used immediately
-        if portal_key in llm_cache:
+        if portal_key in llm_cache: 
             del llm_cache[portal_key]
+        
+        if success:
+            logger.info(f"✅ Successfully ingested document: {doc_instance.title}")
             
-        return True
+        return success
     except Exception as e:
-        print(f"Ingestion Error: {e}")
+        logger.error(f"❌ Ingestion Error for {doc_instance.file.name}: {e}")
         return False
 
 # -------------------------
-# AUTHENTICATION
+# AUTHENTICATION VIEWS
 # -------------------------
 
 def user_login(request):
-    if request.user.is_authenticated: return redirect('classroom:dashboard')
+    if request.user.is_authenticated: 
+        return redirect('classroom:dashboard')
     config = SystemConfig.get_config()
     
     if request.method == 'POST':
         form = UserLoginForm(request, data=request.POST)
         if form.is_valid():
-            user = authenticate(request, username=form.cleaned_data.get('username'), password=form.cleaned_data.get('password'))
+            user = authenticate(
+                request, 
+                username=form.cleaned_data.get('username'), 
+                password=form.cleaned_data.get('password')
+            )
             if user:
                 login(request, user)
                 messages.success(request, f'Welcome, {user.first_name}!')
@@ -214,21 +355,29 @@ def user_login(request):
     else:
         form = UserLoginForm()
     
-    return render(request, 'classroom/login.html', {'form': form, 'config': config, 'branding': config})
+    return render(request, 'classroom/login.html', {
+        'form': form, 
+        'config': config, 
+        'branding': config
+    })
 
 def forgot_password(request):
     if request.method == 'POST':
-        form = UserRegistrationForm(request.POST) 
         email = request.POST.get('email')
         password = request.POST.get('password1')
         confirm = request.POST.get('password2')
 
         if not email or not password:
             messages.error(request, "All fields are required.")
-            return render(request, 'classroom/forgot_password.html', {'form': UserRegistrationForm()})
+            return render(request, 'classroom/forgot_password.html', {
+                'form': UserRegistrationForm()
+            })
+        
         if password != confirm:
             messages.error(request, "Passwords do not match.")
-            return render(request, 'classroom/forgot_password.html', {'form': UserRegistrationForm(initial={'email': email})})
+            return render(request, 'classroom/forgot_password.html', {
+                'form': UserRegistrationForm(initial={'email': email})
+            })
 
         try:
             auth_entry = AuthorizedEmail.objects.get(email=email)
@@ -237,7 +386,7 @@ def forgot_password(request):
             user.last_name = auth_entry.last_name
             user.role = auth_entry.role
             
-            if user.role == 'Student':
+            if user.role in ('Student', 'Employee'):
                 user.department = auth_entry.department
                 user.year = auth_entry.year
                 user.division = auth_entry.division
@@ -250,8 +399,13 @@ def forgot_password(request):
             return redirect('classroom:login')
         except AuthorizedEmail.DoesNotExist:
             messages.error(request, "Email not authorized.")
-            return render(request, 'classroom/forgot_password.html', {'form': UserRegistrationForm(initial={'email': email})})
-    return render(request, 'classroom/forgot_password.html', {'form': UserRegistrationForm()})
+            return render(request, 'classroom/forgot_password.html', {
+                'form': UserRegistrationForm(initial={'email': email})
+            })
+    
+    return render(request, 'classroom/forgot_password.html', {
+        'form': UserRegistrationForm()
+    })
 
 @login_required
 def user_logout(request):
@@ -261,10 +415,14 @@ def user_logout(request):
 
 @login_required
 def dashboard(request):
-    if request.user.is_superuser: return redirect('classroom:admin_dashboard')
-    if request.user.role == 'Student': return redirect('classroom:student_dashboard')
-    if request.user.role == 'Faculty': return redirect('classroom:faculty_dashboard')
-    if request.user.role == 'Admin': return redirect('classroom:admin_dashboard')
+    if request.user.is_superuser: 
+        return redirect('classroom:admin_dashboard')
+    if request.user.role in ('Student', 'Employee'):
+        return redirect('classroom:student_dashboard')
+    if request.user.role == 'Faculty': 
+        return redirect('classroom:faculty_dashboard')
+    if request.user.role == 'Admin': 
+        return redirect('classroom:admin_dashboard')
     return redirect('classroom:login')
 
 # -------------------------
@@ -273,22 +431,57 @@ def dashboard(request):
 
 @login_required
 def student_dashboard(request):
-    if request.user.role != 'Student': return redirect('classroom:dashboard')
+    """
+    Handles Student/Employee Dashboard logic.
+    Updated to handle both Academic (Dropdown ID) and Corporate (Text Search) filters correctly.
+    """
+    if request.user.role not in ('Student', 'Employee'):
+        return redirect('classroom:dashboard')
+    
     current_datetime = timezone.localtime() 
     today = current_datetime.date()
     config = SystemConfig.get_config()
     
-    student_subjects = Subject.objects.filter(department=request.user.department, year=request.user.year).order_by('semester', 'name')
+    student_subjects = Subject.objects.filter(
+        department=request.user.department, 
+        year=request.user.year
+    ).order_by('semester', 'name')
+    
     search_results = None
     is_searching = request.GET.get('action') == 'search'
     
     if is_searching:
         search_date = request.GET.get('date', today.isoformat())
-        query = Booking.objects.filter(booking_date=search_date).select_related('classroom', 'faculty')
-        if request.GET.get('subject'):
-             try: query = query.filter(subject=Subject.objects.get(id=request.GET.get('subject')).name)
-             except: pass
-        if request.GET.get('guest_only'): query = query.filter(is_guest_lecture=True)
+        query = Booking.objects.filter(
+            booking_date=search_date
+        ).select_related('classroom', 'faculty')
+        
+        # --- FIXED SEARCH LOGIC ---
+        search_term = request.GET.get('subject') # 'subject' comes from the form input name
+        
+        if search_term:
+            if config.org_type == 'Corporate':
+                # Corporate: Text based search (Topic OR Organizer)
+                # Using Q objects to search across multiple fields
+                query = query.filter(
+                    Q(subject__icontains=search_term) | 
+                    Q(lecture_title__icontains=search_term) |
+                    Q(faculty_name__icontains=search_term)
+                )
+            else:
+                # College: Dropdown ID search (Standard Academic Flow)
+                # Ensure input is a valid ID before querying
+                if str(search_term).isdigit():
+                    try: 
+                        subject_name = Subject.objects.get(id=int(search_term)).name
+                        query = query.filter(subject=subject_name)
+                    except Subject.DoesNotExist:
+                        pass # ID doesn't exist, return empty or filtered by date only
+        # --------------------------
+        
+        if request.GET.get('guest_only'): 
+            query = query.filter(is_guest_lecture=True)
+        
         search_results = query
 
     my_bookings = Booking.objects.filter(booking_date=today).order_by('slot')
@@ -297,31 +490,49 @@ def student_dashboard(request):
     for booking in my_bookings:
         is_relevant = False
         if booking.is_guest_lecture:
-            if not booking.department or booking.department == request.user.department: is_relevant = True
+            if not booking.department or booking.department == request.user.department: 
+                is_relevant = True
         else:
-            if (booking.department == request.user.department and booking.year == request.user.year and (not booking.division or booking.division == request.user.division)): is_relevant = True
+            if (booking.department == request.user.department and 
+                booking.year == request.user.year and 
+                (not booking.division or booking.division == request.user.division)): 
+                is_relevant = True
         
         if is_relevant:
             status = "Upcoming"
             can_feedback = False
             try:
                 start_str, end_str = booking.slot.split(' - ')
-                start_time = datetime.strptime(start_str, "%H:%M").time()
-                end_time = datetime.strptime(end_str, "%H:%M").time()
-                if 1 <= start_time.hour <= 6: start_time = start_time.replace(hour=start_time.hour + 12)
-                if 1 <= end_time.hour <= 6: end_time = end_time.replace(hour=end_time.hour + 12)
+                fmt = "%H:%M"
+                start_time = datetime.strptime(start_str.strip(), fmt).time()
+                end_time = datetime.strptime(end_str.strip(), fmt).time()
+                
+                if 1 <= start_time.hour <= 6: 
+                    start_time = start_time.replace(hour=start_time.hour + 12)
+                if 1 <= end_time.hour <= 6: 
+                    end_time = end_time.replace(hour=end_time.hour + 12)
                 
                 now_time = current_datetime.time()
-                if now_time < start_time: status = "Upcoming"
+                if now_time < start_time: 
+                    status = "Upcoming"
                 elif start_time <= now_time <= end_time:
                     status = "Live Now"
                     can_feedback = True
                 else:
                     status = "Completed"
                     can_feedback = True
-            except: status = "Scheduled"
+            except:
+                status = "Scheduled"
 
-            timeline.append({'obj': booking, 'status': status, 'can_feedback': can_feedback, 'has_feedback': Feedback.objects.filter(booking=booking, student=request.user).exists()})
+            timeline.append({
+                'obj': booking, 
+                'status': status, 
+                'can_feedback': can_feedback, 
+                'has_feedback': Feedback.objects.filter(
+                    booking=booking, 
+                    student=request.user
+                ).exists()
+            })
 
     context = {
         'today': today, 
@@ -331,14 +542,15 @@ def student_dashboard(request):
         'is_searching': is_searching, 
         'feedback_form': FeedbackForm(), 
         'user': request.user, 
-        'config': config,
-        'branding': config 
+        'config': config 
     }
     return render(request, 'classroom/student_dashboard.html', context)
 
 @login_required
 def faculty_dashboard(request):
-    if request.user.role != 'Faculty': return redirect('classroom:dashboard')
+    if request.user.role != 'Faculty': 
+        return redirect('classroom:dashboard')
+    
     current_datetime = timezone.localtime()
     selected_date_str = request.GET.get('date', current_datetime.date().isoformat())
     selected_date = datetime.strptime(selected_date_str, "%Y-%m-%d").date()
@@ -349,38 +561,50 @@ def faculty_dashboard(request):
     for classroom in classrooms:
         classroom_data = {'classroom': classroom, 'slots': {}}
         for slot in config.class_slots:
-            booking = Booking.objects.filter(classroom=classroom, booking_date=selected_date, slot=slot).first()
+            booking = Booking.objects.filter(
+                classroom=classroom, 
+                booking_date=selected_date, 
+                slot=slot
+            ).first()
+            
             if booking:
                 booking.is_cancellable = False
-                if booking.booking_date > current_datetime.date(): booking.is_cancellable = True
-                elif booking.booking_date == current_datetime.date() and not booking.is_past_or_ongoing(): booking.is_cancellable = True
+                if booking.booking_date > current_datetime.date(): 
+                    booking.is_cancellable = True
+                elif booking.booking_date == current_datetime.date() and not booking.is_past_or_ongoing(): 
+                    booking.is_cancellable = True
+            
             classroom_data['slots'][slot] = booking
         availability_data.append(classroom_data)
 
     my_bookings = Booking.objects.filter(faculty=request.user).order_by('-booking_date')[:5]
+    
     context = {
         'availability_data': availability_data, 
         'config': config, 
-        'branding': config, 
         'selected_date': selected_date_str, 
         'my_bookings': my_bookings, 
-        'form': BookingForm(initial={'booking_date': selected_date})
+        'form': BookingForm(initial={'booking_date': selected_date}),
+        'document_form': DocumentUploadForm()
     }
     return render(request, 'classroom/faculty_dashboard.html', context)
 
 @login_required
 def admin_dashboard(request):
-    if request.user.role != 'Admin' and not request.user.is_superuser: return redirect('classroom:dashboard')
+    if request.user.role != 'Admin' and not request.user.is_superuser: 
+        return redirect('classroom:dashboard')
+    
     config = SystemConfig.get_config()
     
-    # Stats for Visualization
+    # Dashboard Metrics
     all_bookings = Booking.objects.all()
     avg_rating = Feedback.objects.aggregate(Avg('rating'))['rating__avg'] or 0.0
     guest_feedback = Feedback.objects.filter(booking__is_guest_lecture=True)
     guest_avg = guest_feedback.aggregate(Avg('rating'))['rating__avg'] or 0.0
     
-    # Most Booked Room
-    most_booked = Booking.objects.values('classroom__room_number').annotate(total=Count('id')).order_by('-total').first()
+    most_booked = Booking.objects.values('classroom__room_number').annotate(
+        total=Count('id')
+    ).order_by('-total').first()
     
     most_booked_room = None
     if most_booked:
@@ -392,20 +616,42 @@ def admin_dashboard(request):
             'percent': round(percentage, 1)
         }
 
-    # Peak Times
-    slot_stats = Booking.objects.values('slot').annotate(count=Count('id')).order_by('slot')
+    slot_stats = Booking.objects.values('slot').annotate(
+        count=Count('id')
+    ).order_by('slot')
     slot_data = list(slot_stats)
     max_count = max([s['count'] for s in slot_data]) if slot_data else 1
-    for s in slot_data: s['percent'] = (s['count'] / max_count) * 100
+    for s in slot_data: 
+        s['percent'] = (s['count'] / max_count) * 100
 
+    # Handle Settings Save
     if request.method == 'POST' and 'update_branding' in request.POST:
-        branding_form = SystemBrandingForm(request.POST, request.FILES, instance=config, user=request.user)
+        branding_form = SystemBrandingForm(
+            request.POST, 
+            request.FILES, 
+            instance=config, 
+            user=request.user
+        )
+        
         if branding_form.is_valid():
-            branding_form.save()
-            messages.success(request, 'System branding updated.')
+            saved_config = branding_form.save()
+            
+            if saved_config.chatbot_source_url and SCRAPING_AVAILABLE:
+                logger.info(f"🚀 Triggering web scrape for: {saved_config.chatbot_source_url}")
+                scrape_success = ingest_website(saved_config.chatbot_source_url, clear_existing=True)
+                
+                if scrape_success:
+                    messages.success(request, f"✅ Settings saved and website '{saved_config.chatbot_source_url}' successfully scraped!")
+                else:
+                    messages.warning(request, f"⚠️ Settings saved but failed to scrape. Check logs.")
+            else:
+                messages.success(request, '✅ System configuration updated.')
+            
             return redirect('classroom:admin_dashboard')
-        else: messages.error(request, 'Update failed. Check password.')
-    else: branding_form = SystemBrandingForm(instance=config)
+        else: 
+            messages.error(request, '❌ Update failed. Check password.')
+    else: 
+        branding_form = SystemBrandingForm(instance=config)
     
     context = {
         'classrooms': Classroom.objects.all(),
@@ -428,18 +674,18 @@ def admin_dashboard(request):
 
 @login_required
 def create_booking(request):
-    if request.user.role != 'Faculty': return redirect('classroom:dashboard')
+    if request.user.role != 'Faculty': 
+        return redirect('classroom:dashboard')
+    
     if request.method == 'POST':
         config = SystemConfig.get_config()
-        
-        # --- FIX: Handle Corporate Mode Hidden Fields ---
         data = request.POST.copy()
+        
         if config.org_type == 'Corporate':
-            data['semester'] = '1'  # Dummy value
-            data['division'] = 'A'  # Dummy value
+            data['semester'] = '1'
+            data['division'] = 'A' 
         
         form = BookingForm(data)
-        
         if form.is_valid():
             booking = form.save(commit=False)
             booking.faculty = request.user
@@ -454,7 +700,7 @@ def create_booking(request):
                 if config.org_type == 'Corporate':
                     booking.semester = None
                     booking.division = None
-                    booking.subject = raw_subject
+                    booking.subject = raw_subject # Text input directly
                 else:
                     try:
                         if str(raw_subject).isdigit():
@@ -464,7 +710,11 @@ def create_booking(request):
                     except:
                         booking.subject = raw_subject
 
-            if Booking.objects.filter(classroom=booking.classroom, booking_date=booking.booking_date, slot=booking.slot).exists():
+            if Booking.objects.filter(
+                classroom=booking.classroom, 
+                booking_date=booking.booking_date, 
+                slot=booking.slot
+            ).exists():
                 messages.error(request, 'Slot already booked!')
             else:
                 booking.save()
@@ -473,12 +723,14 @@ def create_booking(request):
         else:
             messages.error(request, f'Booking failed: {form.errors}')
             return redirect('classroom:faculty_dashboard')
+    
     return redirect('classroom:faculty_dashboard')
 
 @login_required
 def cancel_booking(request, booking_id):
     booking = get_object_or_404(Booking, id=booking_id)
-    if request.user.role != 'Faculty' or booking.faculty != request.user: return redirect('classroom:dashboard')
+    if request.user.role != 'Faculty' or booking.faculty != request.user: 
+        return redirect('classroom:dashboard')
     booking.delete()
     messages.success(request, 'Booking cancelled.')
     return redirect('classroom:faculty_dashboard')
@@ -486,7 +738,9 @@ def cancel_booking(request, booking_id):
 @login_required
 def submit_feedback(request, booking_id):
     booking = get_object_or_404(Booking, id=booking_id)
-    if request.user.role != 'Student': return redirect('classroom:dashboard')
+    if request.user.role not in ('Student', 'Employee'):
+        return redirect('classroom:dashboard')
+    
     if request.method == 'POST':
         form = FeedbackForm(request.POST)
         if form.is_valid():
@@ -496,13 +750,18 @@ def submit_feedback(request, booking_id):
             feedback.save()
             messages.success(request, 'Feedback submitted!')
             return redirect('classroom:student_dashboard')
-    return render(request, 'classroom/submit_feedback.html', {'form': FeedbackForm(), 'booking': booking})
+    
+    return render(request, 'classroom/submit_feedback.html', {
+        'form': FeedbackForm(), 
+        'booking': booking
+    })
 
 @login_required
 def add_classroom(request):
     if request.method == 'POST':
         form = ClassroomForm(request.POST)
-        if form.is_valid(): form.save()
+        if form.is_valid(): 
+            form.save()
     return redirect('classroom:admin_dashboard')
 
 @login_required
@@ -514,158 +773,305 @@ def delete_classroom(request, classroom_id):
 def view_availability(request):
     selected_date = request.GET.get('date', date.today().isoformat())
     config = SystemConfig.get_config()
-    availability_data = [{'classroom': c, 'slots': {s: Booking.objects.filter(classroom=c, booking_date=selected_date, slot=s).first() for s in config.class_slots}} for c in Classroom.objects.all()]
-    return render(request, 'classroom/view_availability.html', {'availability_data': availability_data, 'selected_date': selected_date, 'config': config, 'branding': config})
+    
+    availability_data = [
+        {
+            'classroom': c, 
+            'slots': {
+                s: Booking.objects.filter(
+                    classroom=c, 
+                    booking_date=selected_date, 
+                    slot=s
+                ).first() 
+                for s in config.class_slots
+            }
+        } 
+        for c in Classroom.objects.all()
+    ]
+    
+    return render(request, 'classroom/view_availability.html', {
+        'availability_data': availability_data, 
+        'selected_date': selected_date, 
+        'config': config
+    })
 
 @login_required
 def upload_document(request):
     """Handle document uploads and trigger AI ingestion"""
-    if request.user.role != 'Faculty': return redirect('classroom:dashboard')
+    config = SystemConfig.get_config()
+    if config.org_type == 'Corporate':
+        can_upload = request.user.is_superuser or request.user.role in ('Admin', 'Employee')
+    else:
+        can_upload = request.user.role == 'Faculty'
+
+    if not can_upload:
+        return redirect('classroom:dashboard')
     
     if request.method == 'POST':
         form = DocumentUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            doc = form.save()
+            doc = form.save(commit=False)
+            doc.uploaded_by = request.user
+            doc.save()
             
-            # Trigger Ingestion
-            success = ingest_document(doc)
-            
-            if success:
-                doc.processed = True
-                doc.save()
-                messages.success(request, f"Successfully uploaded and indexed '{doc.title or doc.file.name}'.")
+            # Trigger AI Ingestion
+            if AI_AVAILABLE:
+                success = ingest_document(doc)
+                if success:
+                    doc.processed = True
+                    doc.save()
+                    messages.success(request, f"✅ '{doc.title}' uploaded and indexed for AI Chat.")
+                else:
+                    messages.warning(request, f"⚠️ '{doc.title}' uploaded but AI indexing failed.")
             else:
-                messages.warning(request, f"File uploaded, but AI indexing failed. It will be retried later.")
-                
-            return redirect('classroom:faculty_dashboard')
-        else:
-            messages.error(request, "Upload failed. Please check the form.")
+                messages.info(request, f"'{doc.title}' uploaded. AI Indexing skipped (System Offline).")
             
-    return redirect('classroom:faculty_dashboard')
+            return redirect('classroom:dashboard')
+    else:
+        form = DocumentUploadForm()
+    
+    return render(request, 'classroom/upload_document.html', {'form': form, 'config': config})
+
+@login_required
+def delete_document(request, doc_id):
+    doc = get_object_or_404(Document, id=doc_id)
+    config = SystemConfig.get_config()
+    if config.org_type == 'Corporate':
+        can_delete = (
+            request.user.is_superuser
+            or request.user.role == 'Admin'
+            or (
+                request.user.role == 'Employee'
+                and doc.uploaded_by_id == request.user.id
+            )
+        )
+    else:
+        can_delete = request.user.role == 'Faculty'
+
+    if not can_delete:
+        return redirect('classroom:dashboard')
+    
+    doc.delete()
+    messages.success(request, "Document deleted.")
+    return redirect('classroom:dashboard')
 
 # -------------------------
-# AJAX
+# REGISTRATION & UTILS
 # -------------------------
 
-def load_subjects(request):
+def register(request):
+    if request.user.is_authenticated:
+        return redirect('classroom:dashboard')
+        
+    if request.method == 'POST':
+        form = UserRegistrationForm(request.POST)
+        if form.is_valid():
+            email = form.cleaned_data.get('email')
+            try:
+                auth_entry = AuthorizedEmail.objects.get(email=email)
+                user = form.save(commit=False)
+                user.username = email 
+                user.role = auth_entry.role
+                
+                # Auto-fill details from AuthorizedEmail
+                user.first_name = auth_entry.first_name
+                user.last_name = auth_entry.last_name
+                
+                if user.role in ('Student', 'Employee'):
+                    user.department = auth_entry.department
+                    user.year = auth_entry.year
+                    user.division = auth_entry.division
+                
+                user.save()
+                messages.success(request, 'Account created! Please login.')
+                return redirect('classroom:login')
+                
+            except AuthorizedEmail.DoesNotExist:
+                messages.error(request, 'Email not authorized by Administrator.')
+    else:
+        form = UserRegistrationForm()
+        
+    return render(request, 'classroom/register.html', {'form': form})
+
+def get_subjects(request):
+    """AJAX endpoint for fetching subjects"""
     department = request.GET.get('department')
     year = request.GET.get('year')
     semester = request.GET.get('semester')
-    subjects = Subject.objects.none()
-    if department and year:
-        qs = Subject.objects.filter(department=department, year=year)
-        if semester: qs = qs.filter(semester=semester)
-        subjects = qs.order_by('name')
-    return JsonResponse(list(subjects.values('id', 'name')), safe=False)
+    
+    subjects = Subject.objects.filter(department=department, year=year)
+    if semester:
+        subjects = subjects.filter(semester=semester)
+        
+    data = [{'id': s.id, 'name': s.name} for s in subjects]
+    return JsonResponse(data, safe=False)
 
-def load_semesters(request):
+def api_get_divisions(request):
+    """Return divisions based on year"""
+    year = request.GET.get('year')
+    divisions = get_allowed_divisions(year)
+    return JsonResponse({'divisions': divisions})
+
+def api_get_semesters(request):
+    """Return semesters based on year"""
     year = request.GET.get('year')
     semesters = get_allowed_semesters(year)
-    return JsonResponse([{'id': s, 'name': s} for s in semesters], safe=False)
-
-def load_divisions(request):
-    department = request.GET.get('department')
-    divisions = get_allowed_divisions(department)
-    return JsonResponse([{'id': d, 'name': d} for d in divisions], safe=False)
+    return JsonResponse({'semesters': semesters})
 
 # -------------------------
-# AI CHATBOT VIEWS (REPLACING FLASK)
+# ANALYTICS & ADMIN TOOLS
 # -------------------------
+
+@login_required
+def get_analytics_data(request):
+    if request.user.role != 'Admin':
+        raise Http404
+        
+    # Room Usage Data
+    room_usage = Booking.objects.values('classroom__room_number').annotate(
+        count=Count('id')
+    ).order_by('-count')[:10]
+    
+    # Department Usage
+    dept_usage = Booking.objects.values('department').annotate(
+        count=Count('id')
+    ).order_by('-count')
+
+    data = {
+        'rooms': {
+            'labels': [x['classroom__room_number'] for x in room_usage],
+            'data': [x['count'] for x in room_usage]
+        },
+        'departments': {
+            'labels': [x['department'] for x in dept_usage if x['department']],
+            'data': [x['count'] for x in dept_usage if x['department']]
+        }
+    }
+    return JsonResponse(data)
+
+@login_required
+def export_analytics(request):
+    if request.user.role != 'Admin':
+        return redirect('classroom:dashboard')
+        
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="analytics_{date.today()}.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['Date', 'Slot', 'Classroom', 'Faculty', 'Department', 'Subject', 'Is Guest', 'Rating'])
+    
+    bookings = Booking.objects.all().select_related('classroom', 'faculty')
+    for b in bookings:
+        feedback = Feedback.objects.filter(booking=b).aggregate(Avg('rating'))
+        rating = feedback['rating__avg'] or 'N/A'
+        
+        writer.writerow([
+            b.booking_date,
+            b.slot,
+            b.classroom.room_number,
+            b.faculty_name,
+            b.department,
+            b.subject,
+            'Yes' if b.is_guest_lecture else 'No',
+            rating
+        ])
+        
+    return response
+
+@login_required
+def manage_authorizations(request):
+    if request.user.role != 'Admin':
+        return redirect('classroom:dashboard')
+    
+    if request.method == 'POST':
+        csv_file = request.FILES.get('csv_file')
+        if csv_file:
+            decoded_file = csv_file.read().decode('utf-8').splitlines()
+            reader = csv.DictReader(decoded_file)
+            count = 0
+            for row in reader:
+                AuthorizedEmail.objects.update_or_create(
+                    email=row['email'],
+                    defaults={
+                        'role': row['role'],
+                        'first_name': row.get('first_name', ''),
+                        'last_name': row.get('last_name', ''),
+                        'department': row.get('department'),
+                        'year': row.get('year'),
+                        'division': row.get('division')
+                    }
+                )
+                count += 1
+            messages.success(request, f'Successfully imported {count} users.')
+    
+    users = AuthorizedEmail.objects.all().order_by('role', 'email')
+    return render(request, 'classroom/manage_auth.html', {'users': users})
+
+# -------------------------
+# AI CHATBOT VIEWS
+# -------------------------
+
+@login_required
+def chat_view(request):
+    """Renders the main chat interface"""
+    config = SystemConfig.get_config()
+    return render(request, 'classroom/chat.html', {
+        'config': config, 
+        'ai_active': AI_AVAILABLE
+    })
 
 @csrf_exempt
+@login_required
 def chat_api(request):
     """
-    Handle chat requests directly within Django.
+    API Endpoint for the Chatbot.
     """
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid method"}, status=405)
     
     if not AI_AVAILABLE:
-        return JsonResponse({'answer': 'AI System is offline (Libraries missing).', 'sources': []})
+        return JsonResponse({"response": "System: AI services are currently offline. Please contact admin."}, status=503)
 
     try:
         data = json.loads(request.body)
-        question = data.get('question', '')
-        portal_name = data.get('portal', 'About VESIT')
-        session_id = data.get('session_id', 'default')
+        user_message = data.get("message", "").strip()
+        portal = data.get("portal", "General Chat")
         
-        if not question:
-            return JsonResponse({'error': 'No question provided'}, status=400)
+        if not user_message:
+            return JsonResponse({"response": "Please enter a message."})
 
-        # Preprocessing
-        question_processed = preprocess_question(question)
+        # 1. Load specific Knowledge Base
+        llm, retriever = load_system(portal)
         
-        # Load System
-        llm, retriever = load_system(portal_name)
-        if not llm:
-            return JsonResponse({'answer': f'Database for {portal_name} not found on server.', 'sources': []})
+        if not llm or not retriever:
+            return JsonResponse({
+                "response": f"System: Knowledge base for '{portal}' is not initialized or empty. Please upload documents/URLs first."
+            })
 
-        # Retrieve
-        docs = retriever.invoke(question_processed)
-        sources = []
+        # 2. Preprocess
+        processed_query = preprocess_question(user_message)
+        
+        # 3. Retrieve Documents
+        docs = retriever.invoke(processed_query)
         
         if not docs:
-            answer = "This information is not available in the official data."
-        else:
-            context_text = "\n\n".join([doc.page_content for doc in docs[:2]])
-            
-            # Extract sources
-            for doc in docs[:2]:
-                src = doc.metadata.get("source")
-                if src and src not in sources:
-                    sources.append(src)
-            
-            # Generate Answer
-            answer = llm.invoke(PROMPT_TEMPLATE.format(context=context_text, question=question))
-            answer = post_process_answer(answer)
-            
-            # Check for "no info" responses
-            no_info_phrases = ["not available", "no information", "cannot find"]
-            if any(x in answer.lower() for x in no_info_phrases):
-                sources = []
+            return JsonResponse({"response": "I couldn't find any relevant information in my database."})
 
-        # Store History (In-memory for now)
-        session_key = f"{session_id}_{portal_name}"
-        if session_key not in chat_sessions:
-            chat_sessions[session_key] = []
+        # 4. Construct Context
+        context_text = "\n\n".join([d.page_content for d in docs])
         
-        chat_sessions[session_key].append({
-            'question': question,
-            'answer': answer,
-            'sources': sources
-        })
+        # 5. Generate Prompt
+        template = get_prompt_template(portal)
+        prompt_text = template.format(context=context_text, question=processed_query)
+        
+        # 6. LLM Inference
+        raw_response = llm.invoke(prompt_text)
+        final_response = post_process_answer(raw_response)
+        
+        return JsonResponse({"response": final_response})
 
-        return JsonResponse({'answer': answer, 'sources': sources})
-
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
     except Exception as e:
-        print(f"AI Error: {e}")
-        return JsonResponse({'error': str(e)}, status=500)
-
-@login_required
-def chat_history(request):
-    """Get chat history"""
-    session_id = request.GET.get('session_id', 'default')
-    portal_name = request.GET.get('portal', 'About VESIT')
-    session_key = f"{session_id}_{portal_name}"
-    return JsonResponse({'history': chat_sessions.get(session_key, [])})
-
-@csrf_exempt
-@login_required
-def clear_history(request):
-    """Clear chat history"""
-    if request.method == 'POST':
-        data = json.loads(request.body)
-        session_id = data.get('session_id', 'default')
-        portal_name = data.get('portal', 'About VESIT')
-        session_key = f"{session_id}_{portal_name}"
-        if session_key in chat_sessions:
-            chat_sessions[session_key] = []
-        return JsonResponse({'status': 'success'})
-    return JsonResponse({'error': 'Invalid method'}, status=405)
-
-def download_pdf(request, filename):
-    """Serve PDF files securely"""
-    file_path = os.path.join(settings.BASE_DIR, 'data', filename)
-    if os.path.exists(file_path):
-        return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=filename)
-    raise Http404("File not found")
+        logger.error(f"Chat API Error: {str(e)}")
+        return JsonResponse({"response": "An internal error occurred while processing your request."}, status=500)

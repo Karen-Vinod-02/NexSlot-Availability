@@ -270,15 +270,35 @@
                             <div class="col-6">
                                 <select name="guest_department" class="form-select bg-light border-0">
                                     <option value="">All Depts</option>
-                                    <option value="Computer Engineering">Computer</option>
-                                    <option value="Mechanical Engineering">Mechanical</option>
+                                    {% if config.org_type == 'Corporate' %}
+                                        <option value="Engineering">Engineering</option>
+                                        <option value="Marketing">Marketing</option>
+                                        <option value="Sales">Sales</option>
+                                        <option value="HR">HR</option>
+                                        <option value="Finance">Finance</option>
+                                    {% else %}
+                                        <option value="Computer Engineering">Computer</option>
+                                        <option value="Electronics & Telecom (EXTC)">EXTC</option>
+                                        <option value="Mechanical Engineering">Mechanical</option>
+                                        <option value="Civil Engineering">Civil</option>
+                                        <option value="Chemical Engineering">Chemical</option>
+                                    {% endif %}
                                 </select>
                             </div>
                             <div class="col-6">
                                 <select name="guest_year" class="form-select bg-light border-0">
-                                    <option value="">All Years</option>
-                                    <option value="FE">FE</option>
-                                    <option value="SE">SE</option>
+                                    <option value="">{% if config.org_type == 'Corporate' %}All Levels{% else %}All Years{% endif %}</option>
+                                    {% if config.org_type == 'Corporate' %}
+                                        <option value="Junior">Junior</option>
+                                        <option value="Mid-Level">Mid-Level</option>
+                                        <option value="Senior">Senior</option>
+                                        <option value="Executive">Executive</option>
+                                    {% else %}
+                                        <option value="FE">FE</option>
+                                        <option value="SE">SE</option>
+                                        <option value="TE">TE</option>
+                                        <option value="BE">BE</option>
+                                    {% endif %}
                                 </select>
                             </div>
                         </div>
@@ -304,54 +324,16 @@
                 <form method="post" action="{% url 'classroom:upload_document' %}" enctype="multipart/form-data">
                     {% csrf_token %}
                     
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold text-muted text-uppercase">Document Title</label>
-                        <input type="text" name="title" class="form-control" placeholder="e.g. Data Structures Syllabus" required>
+                    {{ document_form.title|as_crispy_field }}
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">{{ document_form.department|as_crispy_field }}</div>
+                        <div class="col-md-4">{{ document_form.year|as_crispy_field }}</div>
+                        <div class="col-md-4">{{ document_form.semester|as_crispy_field }}</div>
                     </div>
-
-                    <div class="row g-2 mb-3">
-                        <div class="col-12">
-                            <label class="form-label small fw-bold text-muted">Target Context</label>
-                        </div>
-                        <div class="col-4">
-                            <select name="department" class="form-select bg-light border-0 text-muted small">
-                                <option value="">Dept (General)</option>
-                                <option value="Computer Engineering">Computer</option>
-                                <option value="Electronics & Telecom (EXTC)">EXTC</option>
-                                <option value="Mechanical Engineering">Mechanical</option>
-                                <option value="Civil Engineering">Civil</option>
-                            </select>
-                        </div>
-                        <div class="col-4">
-                            <select name="year" class="form-select bg-light border-0 text-muted small">
-                                <option value="">Year (General)</option>
-                                <option value="FE">FE</option>
-                                <option value="SE">SE</option>
-                                <option value="TE">TE</option>
-                                <option value="BE">BE</option>
-                            </select>
-                        </div>
-                        <div class="col-4">
-                            <select name="semester" class="form-select bg-light border-0 text-muted small">
-                                <option value="">Sem (General)</option>
-                                <option value="Sem 4">Sem 4</option>
-                                <option value="Sem 5">Sem 5</option>
-                            </select>
-                        </div>
-                        <div class="col-12 mt-1">
-                            <small class="text-muted extra-small">
-                                <i class="fas fa-info-circle me-1"></i> 
-                                Tags help the AI find this document faster.
-                            </small>
-                        </div>
-                    </div>
-
-                    <div class="upload-zone mb-3">
-                        <i class="fas fa-file-pdf fa-2x text-muted mb-2"></i>
-                        <div class="small fw-bold text-dark">Click or Drop PDF here</div>
-                        <div class="text-muted extra-small">Max 10MB</div>
-                        <input type="file" name="file" accept=".pdf,.txt" required>
-                    </div>
+                    {{ document_form.file|as_crispy_field }}
+                    <small class="text-muted d-block mb-3">
+                        Add context tags to help retrieve this document. PDF and TXT files are supported.
+                    </small>
 
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary rounded-pill fw-bold py-2">
@@ -408,9 +390,9 @@
             if (orgType === 'Corporate') return;
             if(dept.value && year.value) {
                 if (sem && !sem.value && orgType === 'College') {
-                     subj.innerHTML = '<option value="">Select Semester first</option>';
-                     subj.disabled = true;
-                     return;
+                      subj.innerHTML = '<option value="">Select Semester first</option>';
+                      subj.disabled = true;
+                      return;
                 }
                 subj.innerHTML = '<option>Loading...</option>';
                 subj.disabled = true;

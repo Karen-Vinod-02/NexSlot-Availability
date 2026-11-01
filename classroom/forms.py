@@ -64,7 +64,7 @@ class UserRegistrationForm(UserCreationForm):
         user.first_name = auth_entry.first_name
         user.last_name = auth_entry.last_name
         
-        if auth_entry.role == 'Student':
+        if auth_entry.role in ('Student', 'Employee'):
             user.department = auth_entry.department
             user.year = auth_entry.year
             user.division = auth_entry.division
@@ -133,9 +133,9 @@ class BookingForm(forms.ModelForm):
             self.fields['semester'].widget.attrs['disabled'] = True
             self.fields['division'].widget.attrs['disabled'] = True
             
-            # Change Subject to simple Text Input
-            self.fields['subject'].widget = forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter Meeting Topic'})
-            self.fields['subject'].label = "Topic"
+            # Change Subject to simple Text Input for Meeting Names
+            self.fields['subject'].widget = forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter Meeting Topic / Organizer'})
+            self.fields['subject'].label = "Topic / Organizer"
         else:
             # --- COLLEGE CONFIGURATION ---
             self.fields['department'].choices = [('', '---------')] + DEPT_CHOICES
@@ -179,9 +179,15 @@ class FeedbackForm(forms.ModelForm):
 
 class SystemBrandingForm(forms.ModelForm):
     confirm_password = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control'}), label="Admin Password", required=True)
+    
     class Meta:
         model = SystemConfig
-        fields = ['site_name', 'site_logo', 'org_type', 'primary_color', 'accent_color', 'secondary_color', 'navbar_color', 'sidebar_color']
+        fields = [
+            'site_name', 'site_logo', 'org_type', 'primary_color', 'accent_color', 
+            'secondary_color', 'navbar_color', 'sidebar_color',
+            # New Chatbot Fields
+            'chatbot_enabled', 'chatbot_source_url', 'chatbot_greeting'
+        ]
         widgets = {
             'site_name': forms.TextInput(attrs={'class': 'form-control'}),
             'org_type': forms.Select(attrs={'class': 'form-select'}),
@@ -191,12 +197,21 @@ class SystemBrandingForm(forms.ModelForm):
             'navbar_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control'}),
             'sidebar_color': forms.TextInput(attrs={'type': 'color', 'class': 'form-control'}),
             'site_logo': forms.FileInput(attrs={'class': 'form-control'}),
+            
+            # Chatbot Widgets
+            'chatbot_enabled': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch'}),
+            'chatbot_source_url': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://university.edu/handbook'}),
+            'chatbot_greeting': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': 'Hello! How can I help you today?'}),
         }
     
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
-        for f in ['site_name', 'primary_color', 'site_logo']: self.fields[f].required = False
+        # Ensure optional fields don't block validation
+        optional_fields = ['site_name', 'primary_color', 'site_logo', 'chatbot_source_url', 'chatbot_greeting']
+        for f in optional_fields: 
+            if f in self.fields:
+                self.fields[f].required = False
 
     def clean_confirm_password(self):
         password = self.cleaned_data.get('confirm_password')
